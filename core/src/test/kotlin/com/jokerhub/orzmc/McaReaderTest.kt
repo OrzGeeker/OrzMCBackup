@@ -1,6 +1,6 @@
-package com.example.thanos
+package com.jokerhub.orzmc
 
-import com.example.thanos.mca.McaReader
+import com.jokerhub.orzmc.mca.McaReader
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths

@@ -1,6 +1,6 @@
-package com.example.thanos.patterns
+package com.jokerhub.orzmc.patterns
 
-import com.example.thanos.mca.McaEntry
+import com.jokerhub.orzmc.mca.McaEntry
 
 class ListPattern(private val coords: List<Pair<Int, Int>>) : ChunkPattern {
     override fun matches(entry: McaEntry): Boolean {

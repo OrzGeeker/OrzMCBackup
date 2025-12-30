@@ -1,10 +1,10 @@
-package com.example.thanos.world
+package com.jokerhub.orzmc.world
 
-import com.example.thanos.mca.McaReader
-import com.example.thanos.mca.McaWriter
-import com.example.thanos.patterns.ChunkPattern
-import com.example.thanos.patterns.InhabitedTimePattern
-import com.example.thanos.patterns.ListPattern
+import com.jokerhub.orzmc.mca.McaReader
+import com.jokerhub.orzmc.mca.McaWriter
+import com.jokerhub.orzmc.patterns.ChunkPattern
+import com.jokerhub.orzmc.patterns.InhabitedTimePattern
+import com.jokerhub.orzmc.patterns.ListPattern
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -168,4 +168,3 @@ object Optimizer {
         return try { NbtForceLoader.parse(f) } catch (_: Exception) { emptyList() }
     }
 }
-

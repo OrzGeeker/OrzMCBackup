@@ -1,7 +1,7 @@
-package com.example.thanos.cli
+package com.jokerhub.orzmc.cli
 
-import com.example.thanos.world.Optimizer
-import com.example.thanos.world.ProgressMode
+import com.jokerhub.orzmc.world.Optimizer
+import com.jokerhub.orzmc.world.ProgressMode
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import picocli.CommandLine.Option

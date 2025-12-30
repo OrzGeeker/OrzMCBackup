@@ -1,7 +1,7 @@
-package com.example.thanos
+package com.jokerhub.orzmc
 
-import com.example.thanos.mca.McaReader
-import com.example.thanos.patterns.InhabitedTimePattern
+import com.jokerhub.orzmc.mca.McaReader
+import com.jokerhub.orzmc.patterns.InhabitedTimePattern
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths

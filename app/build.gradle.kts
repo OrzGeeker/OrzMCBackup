@@ -1,10 +1,10 @@
 plugins {
-    kotlin("jvm") version "1.9.22"
+    kotlin("jvm")
     application
-    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
+    id("com.github.johnrengelman.shadow") apply false
 }
 
-group = "com.example.thanos"
+group = "com.jokerhub.orzmc"
 version = "0.1.0"
 
 // Use current JDK; no enforced toolchain to ease local builds
@@ -15,7 +15,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.example.thanos.cli.Main")
+    mainClass.set("com.jokerhub.orzmc.cli.Main")
 }
 
 // Apply Shadow plugin conditionally to allow Gradle 9 to run 'gradle wrapper'
@@ -28,7 +28,7 @@ tasks.matching { it.name == "shadowJar" }.configureEach {
         archiveBaseName.set("backup")
         archiveClassifier.set("")
         manifest {
-            attributes(mapOf("Main-Class" to "com.example.thanos.cli.Main"))
+            attributes(mapOf("Main-Class" to "com.jokerhub.orzmc.cli.Main"))
         }
     }
 }

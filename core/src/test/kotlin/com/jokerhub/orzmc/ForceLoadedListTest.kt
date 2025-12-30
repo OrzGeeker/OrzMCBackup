@@ -1,8 +1,8 @@
-package com.example.thanos
+package com.jokerhub.orzmc
 
-import com.example.thanos.mca.McaReader
-import com.example.thanos.patterns.ListPattern
-import com.example.thanos.world.NbtForceLoader
+import com.jokerhub.orzmc.mca.McaReader
+import com.jokerhub.orzmc.patterns.ListPattern
+import com.jokerhub.orzmc.world.NbtForceLoader
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths

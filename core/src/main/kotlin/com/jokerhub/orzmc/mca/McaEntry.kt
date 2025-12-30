@@ -1,4 +1,4 @@
-package com.example.thanos.mca
+package com.jokerhub.orzmc.mca
 
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer

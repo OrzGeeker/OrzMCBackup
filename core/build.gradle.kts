@@ -1,9 +1,9 @@
 plugins {
-    kotlin("jvm") version "1.9.22"
+    kotlin("jvm")
     `maven-publish`
 }
 
-group = "com.example.thanos"
+group = "com.jokerhub.orzmc"
 version = "0.1.0"
 
 // Use current JDK; no enforced toolchain to ease local builds
@@ -26,7 +26,7 @@ publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-            groupId = "com.example.thanos"
+            groupId = "com.jokerhub.orzmc"
             artifactId = "backup-core"
             version = "0.1.0"
         }

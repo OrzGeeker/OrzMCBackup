@@ -1,4 +1,4 @@
-package com.example.thanos.world
+package com.jokerhub.orzmc.world
 
 import java.io.File
 import java.io.BufferedInputStream
@@ -116,4 +116,3 @@ object NbtForceLoader {
         }
     }
 }
-

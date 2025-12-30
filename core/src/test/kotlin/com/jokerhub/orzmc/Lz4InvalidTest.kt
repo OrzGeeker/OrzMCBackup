@@ -1,6 +1,6 @@
-package com.example.thanos
+package com.jokerhub.orzmc
 
-import com.example.thanos.mca.McaEntry
+import com.jokerhub.orzmc.mca.McaEntry
 import net.jpountz.lz4.LZ4Factory
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test

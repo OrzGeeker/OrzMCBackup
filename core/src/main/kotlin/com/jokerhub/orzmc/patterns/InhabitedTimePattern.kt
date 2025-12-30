@@ -1,6 +1,6 @@
-package com.example.thanos.patterns
+package com.jokerhub.orzmc.patterns
 
-import com.example.thanos.mca.McaEntry
+import com.jokerhub.orzmc.mca.McaEntry
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
