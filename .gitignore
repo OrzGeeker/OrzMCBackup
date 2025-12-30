@@ -1,0 +1,30 @@
+# Gradle build outputs
+build/
+**/build/
+.gradle/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Kotlin/Java tooling caches
+.kotlin/
+.classpath
+.project
+.settings/
+
+# OS files
+.DS_Store
+
+# Logs and temp
+*.log
+tmp/
+.tmp/
+
+# Test resources may include large fixtures — commit intentionally, so do NOT ignore Fixtures
+# src/test/resources/Fixtures/
+
+# Keep Gradle wrapper files tracked
+# gradle/wrapper/gradle-wrapper.jar should be committed
