@@ -1,0 +1,78 @@
+name: release-lib
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.3)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Run unit tests
+        run: ./gradlew :core:test :app:test --no-daemon -Pversion=${{ env.VERSION }}
+      - run: ./gradlew :core:portalBundle --no-daemon -Pversion=${{ env.VERSION }} -Psigning.keyId=${{ secrets.SIGNING_KEY_ID }} -Psigning.password=${{ secrets.SIGNING_PASSWORD }} -Psigning.key=${{ secrets.SIGNING_KEY }}
+      - name: Generate checksums
+        run: |
+          ART_DIR="core/build/portal-repo/io/github/wangzhizhou/backup-core/${VERSION}"
+          files=("backup-core-${VERSION}.jar" "backup-core-${VERSION}-sources.jar" "backup-core-${VERSION}-javadoc.jar" "backup-core-${VERSION}.pom")
+          for f in "${files[@]}"; do
+            sha256sum "${ART_DIR}/${f}" | awk '{print $1}' > "${ART_DIR}/${f}.sha256"
+          done
+      - name: Validate signatures and checksums
+        run: |
+          ART_DIR="core/build/portal-repo/io/github/wangzhizhou/backup-core/${VERSION}"
+          ls -la "$ART_DIR"
+          files=("backup-core-${VERSION}.jar" "backup-core-${VERSION}-sources.jar" "backup-core-${VERSION}-javadoc.jar" "backup-core-${VERSION}.pom")
+          for f in "${files[@]}"; do
+            test -s "$ART_DIR/$f" || { echo "missing artifact: $f"; exit 1; }
+            test -s "$ART_DIR/$f.asc" || { echo "missing signature: $f.asc"; exit 1; }
+            actual=$(sha256sum "$ART_DIR/$f" | awk '{print $1}')
+            expected=$(tr -d '\n\r' < "$ART_DIR/$f.sha256")
+            if [ "$actual" != "$expected" ]; then
+              echo "sha256 mismatch for $f"; echo "expected=$expected actual=$actual"; exit 1;
+            fi
+          done
+      - name: Validate bundle archive
+        run: |
+          test -s core/build/portal-bundle.zip || { echo "missing portal-bundle.zip"; exit 1; }
+          unzip -t core/build/portal-bundle.zip
+          sha256sum core/build/portal-bundle.zip
+      - name: Upload bundle to Central Portal
+        env:
+          CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
+          CENTRAL_PORTAL_UPLOAD_URL: ${{ secrets.CENTRAL_PORTAL_UPLOAD_URL }}
+        run: |
+          test -n "${CENTRAL_PORTAL_UPLOAD_URL}" || { echo "missing CENTRAL_PORTAL_UPLOAD_URL"; exit 1; }
+          test -n "${CENTRAL_TOKEN}" || { echo "missing CENTRAL_TOKEN"; exit 1; }
+          attempts=0
+          while [ $attempts -lt 3 ]; do
+            code=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" -H "Content-Type: multipart/form-data" -H "accept: text/plain" -F "bundle=@core/build/portal-bundle.zip;type=application/zip" "${CENTRAL_PORTAL_UPLOAD_URL}" -o resp.txt -D headers.txt -w '%{http_code}')
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+              echo "upload success (HTTP $code)"; cat headers.txt; cat resp.txt; break;
+            else
+              echo "upload failed (HTTP $code), attempt $((attempts+1))/3"; cat headers.txt; cat resp.txt; attempts=$((attempts+1)); sleep $((5*attempts));
+            fi
+          done
+          [ $attempts -lt 3 ] || { echo "all upload attempts failed"; exit 1; }
+      - run: ./gradlew --stop

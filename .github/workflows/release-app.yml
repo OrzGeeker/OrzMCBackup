@@ -1,0 +1,60 @@
+name: release-app
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  app:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Run unit tests
+        run: ./gradlew :core:test :app:test --no-daemon -Pversion=${{ env.VERSION }}
+      - name: Build app shadowJar
+        run: ./gradlew :app:shadowJar --no-daemon -Pversion=${{ env.VERSION }}
+      - name: Generate app checksum
+        run: |
+          APP_JAR="app/build/libs/backup-${VERSION}.jar"
+          test -s "${APP_JAR}" || { echo "missing app jar: ${APP_JAR}"; exit 1; }
+          sha256sum "${APP_JAR}" | awk '{print $1}' > "${APP_JAR}.sha256"
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-backup-${{ env.VERSION }}
+          path: |
+            app/build/libs/backup-${{ env.VERSION }}.jar
+            app/build/libs/backup-${{ env.VERSION }}.jar.sha256
+      - name: Publish GitHub Release (app)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: OrzMCBackup CLI v${{ env.VERSION }}
+          files: |
+            app/build/libs/backup-${{ env.VERSION }}.jar
+            app/build/libs/backup-${{ env.VERSION }}.jar.sha256
+      - run: ./gradlew --stop
