@@ -1,10 +1,10 @@
 plugins {
     kotlin("jvm")
     `maven-publish`
+    signing
+    id("org.jetbrains.dokka") version "1.9.20"
 }
 
-group = "com.jokerhub.orzmc"
-version = "0.1.0"
 
 // Use current JDK; no enforced toolchain to ease local builds
 
@@ -22,13 +22,70 @@ tasks.test {
 
 // Test resources are expected under src/test/resources/Fixtures committed to VCS
 
+java {
+    withSourcesJar()
+}
+
+tasks.register<Jar>("javadocJar") {
+    dependsOn("dokkaHtml")
+    from("$buildDir/dokka/html")
+    archiveClassifier.set("javadoc")
+}
+
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
             groupId = "com.jokerhub.orzmc"
             artifactId = "backup-core"
-            version = "0.1.0"
+            artifact(tasks.named("javadocJar"))
+
+            pom {
+                name.set("OrzMC Backup Core")
+                description.set("Core library for optimizing Minecraft Java worlds")
+                url.set("https://github.com/OrzGeeker/OrzMCBackup")
+                licenses {
+                    license {
+                        name.set("Apache License 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("orzmc")
+                        name.set("wangzhizhou")
+                        email.set("824219521@qq.com")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/OrzGeeker/OrzMCBackup")
+                    connection.set("scm:git:https://github.com/OrzGeeker/OrzMCBackup.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/OrzGeeker/OrzMCBackup.git")
+                }
+            }
         }
     }
+    repositories {
+        maven {
+            name = "portalRepo"
+            url = uri("$buildDir/portal-repo")
+        }
+    }
+}
+
+signing {
+    val keyId = findProperty("signing.keyId") as String?
+    val key = findProperty("signing.key") as String?
+    val password = findProperty("signing.password") as String?
+    if (!key.isNullOrBlank()) {
+        useInMemoryPgpKeys(keyId, key, password)
+        sign(publishing.publications["mavenJava"])
+    }
+}
+
+tasks.register<Zip>("portalBundle") {
+    dependsOn("publishMavenJavaPublicationToPortalRepoRepository")
+    from("$buildDir/portal-repo")
+    archiveFileName.set("portal-bundle.zip")
+    destinationDirectory.set(file("$buildDir"))
 }

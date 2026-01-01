@@ -4,8 +4,6 @@ plugins {
     id("com.github.johnrengelman.shadow")
 }
 
-group = "com.jokerhub.orzmc"
-version = "0.1.0"
 
 // Use current JDK; no enforced toolchain to ease local builds
 
