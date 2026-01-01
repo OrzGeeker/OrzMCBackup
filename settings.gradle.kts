@@ -1,2 +1,2 @@
-rootProject.name = "rust-thanos-backup"
+rootProject.name = "OrzMCBackup"
 include("core", "app")

@@ -1,7 +1,7 @@
 plugins {
     kotlin("jvm")
     application
-    id("com.github.johnrengelman.shadow") apply false
+    id("com.github.johnrengelman.shadow")
 }
 
 group = "com.jokerhub.orzmc"
@@ -18,10 +18,7 @@ application {
     mainClass.set("com.jokerhub.orzmc.cli.Main")
 }
 
-// Apply Shadow plugin conditionally to allow Gradle 9 to run 'gradle wrapper'
-if (gradle.gradleVersion.startsWith("8.")) {
-    pluginManager.apply("com.github.johnrengelman.shadow")
-}
+
 
 tasks.matching { it.name == "shadowJar" }.configureEach {
     (this as com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).apply {
