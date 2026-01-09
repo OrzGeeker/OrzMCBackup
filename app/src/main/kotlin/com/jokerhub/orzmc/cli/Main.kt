@@ -2,17 +2,14 @@ package com.jokerhub.orzmc.cli
 
 import com.jokerhub.orzmc.world.Optimizer
 import com.jokerhub.orzmc.world.ProgressMode
+import com.jokerhub.orzmc.world.OptimizeException
+import com.jokerhub.orzmc.world.ReportIO
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import picocli.CommandLine.Option
 import picocli.CommandLine.Parameters
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.Callable
-import java.time.format.DateTimeFormatter
-import java.time.LocalDateTime
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 @Command(
     name = "backup",
@@ -48,64 +45,30 @@ class Main : Callable<Int> {
     @Option(names = ["-f", "--force"], description = ["Force overwrite OUTPUT_DIR if it exists (no prompt)"], defaultValue = "false")
     var force: Boolean = false
 
+    @Option(names = ["--strict"], description = ["Strict mode: fail on damaged MCA or parse errors"], defaultValue = "false")
+    var strict: Boolean = false
+    @Option(names = ["--report"], description = ["Print summary report and errors"], defaultValue = "false")
+    var report: Boolean = false
+    @Option(names = ["--report-file"], description = ["Write report to file (JSON/CSV)"], required = false)
+    var reportFile: Path? = null
+    @Option(names = ["--report-format"], description = ["Report format: json | csv"], defaultValue = "json")
+    var reportFormat: String = "json"
+
     override fun call(): Int {
-        if (!inPlace) {
-            output?.let { outDir ->
-                if (Files.exists(outDir)) {
-                    val nonEmpty = Files.list(outDir).findFirst().isPresent
-                    if (nonEmpty) {
-                        if (force) {
-                            Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-                            Files.createDirectories(outDir)
-                        } else {
-                            print("输出目录已存在，是否覆盖？[y/N]: ")
-                            val resp = readlnOrNull()?.trim()?.lowercase()
-                            if (resp == "y" || resp == "yes") {
-                                Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-                                Files.createDirectories(outDir)
-                            } else {
-                                return 0
-                            }
-                        }
-                    }
-                }
+        return try {
+            val r = Optimizer.run(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict)
+            if (report) println(ReportIO.toText(r))
+            reportFile?.let { path ->
+                ReportIO.write(r, path, reportFormat)
+                println("报告已写入：$path")
             }
-        }
-
-        val dest = if (inPlace) null else output
-        Optimizer.run(input, dest, inhabitedTimeSeconds, removeUnknown, progressMode)
-
-        if (!inPlace) {
-            output?.let { outDir ->
-                if (zipOutput) {
-                    val ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                    val parent = outDir.parent ?: Path.of(".")
-                    val zipPath = parent.resolve("$ts.zip")
-                    println("开始压缩: ${outDir} → ${zipPath}")
-                    zipDir(outDir, zipPath)
-                    println("zip: $zipPath")
-                    Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-                }
-            }
-        }
-        return 0
-    }
-
-    private fun zipDir(src: Path, dstZip: Path) {
-        ZipOutputStream(Files.newOutputStream(dstZip)).use { zos ->
-            Files.walk(src).forEach { p ->
-                val rel = src.relativize(p)
-                if (rel.toString().isEmpty()) return@forEach
-                if (Files.isDirectory(p)) {
-                    val name = rel.toString().trimEnd('/') + "/"
-                    zos.putNextEntry(ZipEntry(name))
-                    zos.closeEntry()
-                } else {
-                    zos.putNextEntry(ZipEntry(rel.toString()))
-                    Files.copy(p, zos)
-                    zos.closeEntry()
-                }
-            }
+            if (strict && r.errors.isNotEmpty()) 1 else 0
+        } catch (e: OptimizeException) {
+            System.err.println(e.message ?: "发生错误")
+            1
+        } catch (e: Exception) {
+            System.err.println("发生错误：" + (e.message ?: e.toString()))
+            1
         }
     }
 

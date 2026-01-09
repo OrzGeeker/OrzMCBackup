@@ -31,6 +31,10 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
 - --in-place：原地处理，忽略输出目录并替换输入目录
 - --zip-output：将输出目录打包为时间戳 zip 并删除目录
 - -f, --force：覆盖已存在且非空的输出目录（无交互）
+- --strict：严格模式，遇到损坏的 MCA 或解析失败时返回非零退出码
+- --report：在标准输出打印处理统计与错误列表
+- --report-file：将报告写入文件（支持 JSON/CSV）
+- --report-format：json | csv（默认 json）
 
 ## 作为库使用
 - 发布到本地 Maven 仓库：
