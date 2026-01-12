@@ -30,9 +30,12 @@ object Optimizer {
         inPlace: Boolean = false,
         force: Boolean = false,
         strict: Boolean = false,
+        progressInterval: Long = 1000,
+        progressIntervalMs: Long = 0,
         onError: ((OptimizeError) -> Unit)? = null,
+        onProgress: ((ProgressEvent) -> Unit)? = null,
     ): OptimizeReport {
-        return runWithReport(input, output, inhabitedThresholdSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, onError)
+        return runWithReport(input, output, inhabitedThresholdSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, progressInterval, progressIntervalMs, onError, onProgress)
     }
 
     @JvmStatic
@@ -46,7 +49,10 @@ object Optimizer {
         inPlace: Boolean = false,
         force: Boolean = false,
         strict: Boolean = false,
+        progressInterval: Long = 1000,
+        progressIntervalMs: Long = 0,
         onError: ((OptimizeError) -> Unit)? = null,
+        onProgress: ((ProgressEvent) -> Unit)? = null,
     ): OptimizeReport {
         val errors = mutableListOf<OptimizeError>()
         fun record(path: Path, kind: String, msg: String) {
@@ -54,11 +60,17 @@ object Optimizer {
             onError?.invoke(e)
             errors.add(e)
         }
+        fun emit(stage: ProgressStage, current: Long? = null, total: Long? = null, path: Path? = null, message: String? = null) {
+            onProgress?.invoke(ProgressEvent(stage, current, total, path?.toString(), message))
+        }
+        val useTime = progressIntervalMs > 0
+        var lastEmit = System.currentTimeMillis()
         if (!Files.isDirectory(input)) {
             val msg = "输入目录不存在或不是目录"
             record(input, "Input", msg)
             return OptimizeReport(processedChunks = 0, removedChunks = 0, errors = errors)
         }
+        emit(ProgressStage.Init, 0, 0, input, "开始")
         val ticks = inhabitedThresholdSeconds * 20
         val out: Path = if (inPlace) {
             Files.createTempDirectory("thanos-")
@@ -91,12 +103,15 @@ object Optimizer {
             }
             output
         }
+        emit(ProgressStage.Discover, null, null, input, "扫描维度")
         val tasks = discoverDimensions(input)
         val totalChunks = countTotalChunks(tasks)
         var processedChunks = 0L
         var removedTotal = 0L
+        emit(ProgressStage.Discover, 0, totalChunks, input, "统计区块")
 
         tasks.forEach { dim ->
+            emit(ProgressStage.DimensionStart, null, null, dim, null)
             val rel = input.relativize(dim)
             val targetDim = out.resolve(rel)
             Files.createDirectories(targetDim)
@@ -117,6 +132,7 @@ object Optimizer {
 
             Files.list(regionDir).use { stream ->
                 stream.filter { p -> p.toString().endsWith(".mca") }.forEach regionLoop@ { rf ->
+                    emit(ProgressStage.RegionStart, null, null, rf, null)
                     if (!isValidMca(rf)) {
                         record(rf, "MCA", "MCA 文件损坏或不完整")
                         if (!strict) return@regionLoop
@@ -167,8 +183,17 @@ object Optimizer {
                         } else {
                             removed += 1
                             removedTotal += 1
-                        }
+                    }
                         processedChunks += 1
+                        if (useTime) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastEmit >= progressIntervalMs) {
+                                emit(ProgressStage.ChunkProgress, processedChunks, totalChunks, rf, null)
+                                lastEmit = now
+                            }
+                        } else if (progressInterval > 0 && processedChunks % progressInterval == 0L) {
+                            emit(ProgressStage.ChunkProgress, processedChunks, totalChunks, rf, null)
+                        }
                         if (progressMode == ProgressMode.Global) {
                             val pct = (processedChunks * 100 / (totalChunks.coerceAtLeast(1))).toInt()
                             if (processedChunks % 100 == 0L) println("进度: $pct% ($processedChunks/$totalChunks)")
@@ -179,6 +204,7 @@ object Optimizer {
                     try { pw?.finalizeFile() } catch (e: Exception) { record(pfile, "FinalizePoi", "完成 POI 写入失败") }
                 }
             }
+            emit(ProgressStage.DimensionEnd, null, null, dim, null)
         }
         if (inPlace) {
             // in-place mode replacement
@@ -227,6 +253,7 @@ object Optimizer {
                 val parent = out.parent ?: Path.of(".")
                 val zipPath = parent.resolve("$ts.zip")
                 try {
+                    emit(ProgressStage.Compress, null, null, out, null)
                     ZipOutputStream(Files.newOutputStream(zipPath)).use { zos ->
                         Files.walk(out).forEach { p ->
                             val rel = out.relativize(p)
@@ -247,6 +274,7 @@ object Optimizer {
                     record(out, "Compress", msg)
                 }
                 try {
+                    emit(ProgressStage.Cleanup, null, null, out, null)
                     Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
                 } catch (e: IOException) {
                     val msg = "删除输出目录失败：${out}"
@@ -254,6 +282,7 @@ object Optimizer {
                 }
             }
         }
+        emit(ProgressStage.Done, processedChunks, totalChunks, input, null)
         return OptimizeReport(processedChunks, removedTotal, errors)
     }
 

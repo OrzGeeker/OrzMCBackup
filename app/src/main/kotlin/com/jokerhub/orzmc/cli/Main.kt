@@ -53,10 +53,14 @@ class Main : Callable<Int> {
     var reportFile: Path? = null
     @Option(names = ["--report-format"], description = ["Report format: json | csv"], defaultValue = "json")
     var reportFormat: String = "json"
+    @Option(names = ["--progress-interval"], description = ["Progress callback interval (chunks)"], defaultValue = "1000")
+    var progressInterval: Long = 1000
+    @Option(names = ["--progress-interval-ms"], description = ["Progress callback interval (milliseconds)"], defaultValue = "0")
+    var progressIntervalMs: Long = 0
 
     override fun call(): Int {
         return try {
-            val r = Optimizer.run(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict)
+            val r = Optimizer.run(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, progressInterval, progressIntervalMs)
             if (report) println(ReportIO.toText(r))
             reportFile?.let { path ->
                 ReportIO.write(r, path, reportFormat)
