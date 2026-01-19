@@ -57,10 +57,15 @@ class Main : Callable<Int> {
     var progressInterval: Long = 1000
     @Option(names = ["--progress-interval-ms"], description = ["Progress callback interval (milliseconds)"], defaultValue = "0")
     var progressIntervalMs: Long = 0
+    @Option(names = ["--parallelism"], description = ["Parallel dimension processing threads"], defaultValue = "1")
+    var parallelism: Int = 1
 
     override fun call(): Int {
         return try {
-            val r = Optimizer.run(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, progressInterval, progressIntervalMs)
+            val r = if (parallelism <= 1)
+                Optimizer.run(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, progressInterval, progressIntervalMs)
+            else
+                Optimizer.runWithReport(input, output, inhabitedTimeSeconds, removeUnknown, progressMode, zipOutput, inPlace, force, strict, progressInterval, progressIntervalMs, null, null, parallelism)
             if (report) println(ReportIO.toText(r))
             reportFile?.let { path ->
                 ReportIO.write(r, path, reportFormat)

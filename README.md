@@ -37,6 +37,7 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
 - --report-format：json | csv（默认 json）
 - --progress-interval：进度回调的区块粒度（默认 1000）
 - --progress-interval-ms：进度回调的时间粒度，>0 时优先使用（默认 0）
+- --parallelism：并行处理维度的线程数（默认 1）
 
 ## 作为库使用
 - 发布到本地 Maven 仓库：

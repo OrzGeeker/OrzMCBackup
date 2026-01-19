@@ -11,11 +11,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
-import java.nio.file.attribute.DosFileAttributeView
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import java.io.IOException
 
 enum class ProgressMode { Off, Global, Region }
@@ -55,6 +50,7 @@ object Optimizer {
         progressIntervalMs: Long = 0,
         onError: ((OptimizeError) -> Unit)? = null,
         onProgress: ((ProgressEvent) -> Unit)? = null,
+        parallelism: Int = 1,
     ): OptimizeReport {
         val errors = mutableListOf<OptimizeError>()
         fun record(path: Path, kind: String, msg: String) {
@@ -66,7 +62,6 @@ object Optimizer {
             onProgress?.invoke(ProgressEvent(stage, current, total, path?.toString(), message))
         }
         val useTime = progressIntervalMs > 0
-        var lastEmit = System.currentTimeMillis()
         if (!Files.isDirectory(input)) {
             val msg = "输入目录不存在或不是目录"
             record(input, "Input", msg)
@@ -107,106 +102,71 @@ object Optimizer {
         }
         emit(ProgressStage.Discover, null, null, input, "扫描维度")
         val tasks = discoverDimensions(input)
-        val totalChunks = countTotalChunks(tasks)
-        var processedChunks = 0L
+        val totalChunks = McaUtils.countTotalChunks(tasks)
+        val processedChunksAtomic = java.util.concurrent.atomic.AtomicLong(0L)
         var removedTotal = 0L
         emit(ProgressStage.Discover, 0, totalChunks, input, "统计区块")
 
-        tasks.forEach { dim ->
-            emit(ProgressStage.DimensionStart, null, null, dim, null)
-            val rel = input.relativize(dim)
-            val targetDim = out.resolve(rel)
-            Files.createDirectories(targetDim)
-            val forced = try { parseForceLoaded(dim, strict) } catch (e: ForceLoadedParseException) {
-                if (strict) record(dim, "ForceLoaded", e.message ?: "解析强制加载列表失败")
-                emptyList()
-            }
-            val patterns: MutableList<ChunkPattern> = mutableListOf(
-                ListPattern(forced),
-                InhabitedTimePattern(ticks, removeUnknown)
-            )
-            val regionDir = dim.resolve("region")
-            val entitiesDir = dim.resolve("entities")
-            val poiDir = dim.resolve("poi")
-            Files.createDirectories(targetDim.resolve("region"))
-            if (Files.isDirectory(entitiesDir)) Files.createDirectories(targetDim.resolve("entities"))
-            if (Files.isDirectory(poiDir)) Files.createDirectories(targetDim.resolve("poi"))
-
-            Files.list(regionDir).use { stream ->
-                stream.filter { p -> p.toString().endsWith(".mca") }.forEach regionLoop@ { rf ->
-                    emit(ProgressStage.RegionStart, null, null, rf, null)
-                    if (!isValidMca(rf)) {
-                        record(rf, "MCA", "MCA 文件损坏或不完整")
-                        if (!strict) return@regionLoop
-                    }
-                    val name = rf.fileName.toString()
-                    val cr = try { McaReader.open(rf.toString()) } catch (e: Exception) {
-                        record(rf, "MCA", "无法读取 MCA 文件")
-                        return@regionLoop
-                    }
-                    val cw = McaWriter(targetDim.resolve("region").resolve(name).toString())
-                    val efile = entitiesDir.resolve(name)
-                    val pfile = poiDir.resolve(name)
-                    val ew = if (Files.isRegularFile(efile) && isValidMca(efile)) McaWriter(targetDim.resolve("entities").resolve(name).toString()) else null
-                    val pw = if (Files.isRegularFile(pfile) && isValidMca(pfile)) McaWriter(targetDim.resolve("poi").resolve(name).toString()) else null
-
-                    var removed = 0L
-                    val entries = try { cr.entries() } catch (e: Exception) {
-                        record(rf, "Entries", "读取区块条目失败")
-                        emptyList()
-                    }
-                    for (entry in entries) {
-                        var keep = false
-                        for (p in patterns) {
-                            try {
-                                if (p.matches(entry)) { keep = true; break }
-                            } catch (e: Exception) {
-                                record(rf, "Pattern", "匹配模式失败")
-                            }
-                        }
-                        if (keep) {
-                            try { cw.writeEntry(entry) } catch (e: Exception) { record(rf, "Write", "写入条目失败") }
-                            // entities
-                            try {
-                                val er = if (Files.isRegularFile(efile) && isValidMca(efile)) McaReader.open(efile.toString()) else null
-                                val eentry = er?.get(entry.regionIndex())
-                                if (eentry != null && ew != null) try { ew.writeEntry(eentry) } catch (e: Exception) { record(efile, "WriteEntities", "写入实体条目失败") }
-                            } catch (e: Exception) {
-                                record(efile, "Entities", "读取实体失败")
-                            }
-                            // poi
-                            try {
-                                val pr = if (Files.isRegularFile(pfile) && isValidMca(pfile)) McaReader.open(pfile.toString()) else null
-                                val pentry = pr?.get(entry.regionIndex())
-                                if (pentry != null && pw != null) try { pw.writeEntry(pentry) } catch (e: Exception) { record(pfile, "WritePoi", "写入 POI 条目失败") }
-                            } catch (e: Exception) {
-                                record(pfile, "Poi", "读取 POI 失败")
-                            }
-                        } else {
-                            removed += 1
-                            removedTotal += 1
-                    }
-                        processedChunks += 1
-                        if (useTime) {
-                            val now = System.currentTimeMillis()
-                            if (now - lastEmit >= progressIntervalMs) {
-                                emit(ProgressStage.ChunkProgress, processedChunks, totalChunks, rf, null)
-                                lastEmit = now
-                            }
-                        } else if (progressInterval > 0 && processedChunks % progressInterval == 0L) {
-                            emit(ProgressStage.ChunkProgress, processedChunks, totalChunks, rf, null)
-                        }
-                        if (progressMode == ProgressMode.Global) {
-                            val pct = (processedChunks * 100 / (totalChunks.coerceAtLeast(1))).toInt()
-                            if (processedChunks % 100 == 0L) println("进度: $pct% ($processedChunks/$totalChunks)")
-                        }
-                    }
-                    try { cw.finalizeFile() } catch (e: Exception) { record(rf, "Finalize", "完成写入失败") }
-                    try { ew?.finalizeFile() } catch (e: Exception) { record(efile, "FinalizeEntities", "完成实体写入失败") }
-                    try { pw?.finalizeFile() } catch (e: Exception) { record(pfile, "FinalizePoi", "完成 POI 写入失败") }
+        if (parallelism <= 1) {
+            tasks.forEach { dim ->
+                val rel = input.relativize(dim)
+                val targetDim = out.resolve(rel)
+                val forced = try { ForceLoad.parse(dim, strict) } catch (e: ForceLoadedParseException) {
+                    if (strict) record(dim, "ForceLoaded", e.message ?: "解析强制加载列表失败")
+                    emptyList()
                 }
+                val patterns = listOf(
+                    ListPattern(forced),
+                    InhabitedTimePattern(ticks, removeUnknown)
+                )
+                val res = DimensionProcessor.process(
+                    dim,
+                    targetDim,
+                    patterns,
+                    { p, k, m -> record(p, k, m) },
+                    onProgress,
+                    totalChunks,
+                    progressInterval,
+                    progressIntervalMs,
+                    processedChunksAtomic,
+                    strict
+                )
+                removedTotal += res.removed
             }
-            emit(ProgressStage.DimensionEnd, null, null, dim, null)
+        } else {
+            val executor = java.util.concurrent.Executors.newFixedThreadPool(parallelism)
+            val futures = mutableListOf<java.util.concurrent.Future<DimensionResult>>()
+            tasks.forEach { dim ->
+                val rel = input.relativize(dim)
+                val targetDim = out.resolve(rel)
+                val forced = try { ForceLoad.parse(dim, strict) } catch (e: ForceLoadedParseException) {
+                    if (strict) record(dim, "ForceLoaded", e.message ?: "解析强制加载列表失败")
+                    emptyList()
+                }
+                val patterns = listOf(
+                    ListPattern(forced),
+                    InhabitedTimePattern(ticks, removeUnknown)
+                )
+                val task = java.util.concurrent.Callable<DimensionResult> {
+                        DimensionProcessor.process(
+                        dim,
+                        targetDim,
+                        patterns,
+                        { p, k, m -> record(p, k, m) },
+                        onProgress,
+                        totalChunks,
+                        progressInterval,
+                        progressIntervalMs,
+                        processedChunksAtomic,
+                        strict
+                        )
+                }
+                futures.add(executor.submit(task))
+            }
+            futures.forEach { f ->
+                try { removedTotal += f.get().removed } catch (_: Exception) { }
+            }
+            executor.shutdown()
         }
         if (inPlace) {
             // in-place mode replacement
@@ -245,40 +205,23 @@ object Optimizer {
                 }
             }
             try {
-                val ok = deleteTreeWithRetry(out, 5, 500)
+                val ok = Cleaner.deleteTreeWithRetry(out, 5, 500)
                 if (!ok) throw IOException("cleanup failed")
             } catch (e: IOException) {
                 throw InPlaceReplacementException("清理临时目录失败：${out}", e)
             }
         } else {
             if (zipOutput) {
-                val ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                val parent = out.parent ?: Paths.get(".")
-                val zipPath = parent.resolve("$ts.zip")
                 try {
                     emit(ProgressStage.Compress, null, null, out, null)
-                    ZipOutputStream(Files.newOutputStream(zipPath)).use { zos ->
-                        Files.walk(out).forEach { p ->
-                            val rel = out.relativize(p)
-                            if (rel.toString().isEmpty()) return@forEach
-                            if (Files.isDirectory(p)) {
-                                val name = rel.toString().trimEnd('/') + "/"
-                                zos.putNextEntry(ZipEntry(name))
-                                zos.closeEntry()
-                            } else {
-                                zos.putNextEntry(ZipEntry(rel.toString()))
-                                Files.copy(p, zos)
-                                zos.closeEntry()
-                            }
-                        }
-                    }
+                    Compressor.compressToTimestampZip(out)
                 } catch (e: IOException) {
                     val msg = "压缩输出目录失败：${out}"
                     record(out, "Compress", msg)
                 }
                 try {
                     emit(ProgressStage.Cleanup, null, null, out, null)
-                    val ok = deleteTreeWithRetry(out, 5, 500)
+                    val ok = Cleaner.deleteTreeWithRetry(out, 5, 500)
                     if (!ok) throw IOException("cleanup failed")
                 } catch (e: IOException) {
                     val msg = "删除输出目录失败：${out}"
@@ -286,8 +229,8 @@ object Optimizer {
                 }
             }
         }
-        emit(ProgressStage.Done, processedChunks, totalChunks, input, null)
-        return OptimizeReport(processedChunks, removedTotal, errors)
+        emit(ProgressStage.Done, processedChunksAtomic.get(), totalChunks, input, null)
+        return OptimizeReport(processedChunksAtomic.get(), removedTotal, errors)
     }
 
     private fun isDimensionDir(path: Path): Boolean = Files.isDirectory(path.resolve("region"))
@@ -300,63 +243,5 @@ object Optimizer {
         return tasks
     }
 
-    private fun countTotalChunks(dims: List<Path>): Long {
-        var total = 0L
-        for (dim in dims) {
-            val regionDir = dim.resolve("region")
-            if (!Files.isDirectory(regionDir)) continue
-            Files.list(regionDir).use { s ->
-                s.filter { it.toString().endsWith(".mca") && isValidMca(it) }.forEach { p ->
-                    try {
-                        val r = McaReader.open(p.toString())
-                        total += r.entries().size
-                    } catch (_: Exception) { }
-                }
-            }
-        }
-        return total
-    }
-
-    private fun isValidMca(path: Path): Boolean {
-        return try {
-            Files.size(path) >= 8192
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun parseForceLoaded(dimension: Path, strict: Boolean): List<Pair<Int, Int>> {
-        val f = dimension.resolve("data").resolve("chunks.dat").toFile()
-        if (!f.isFile) return emptyList()
-        return try { NbtForceLoader.parse(f) } catch (e: Exception) {
-            if (strict) throw ForceLoadedParseException("解析强制加载列表失败：${f}", e) else emptyList()
-        }
-    }
-
-    private fun clearDosAttributes(p: Path) {
-        try {
-            val v = Files.getFileAttributeView(p, DosFileAttributeView::class.java)
-            if (v != null) {
-                try { v.setReadOnly(false) } catch (_: Exception) {}
-                try { v.setHidden(false) } catch (_: Exception) {}
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun deleteTreeWithRetry(root: Path, attempts: Int, sleepMs: Long): Boolean {
-        var i = 0
-        while (i < attempts) {
-            try {
-                Files.walk(root).sorted(Comparator.reverseOrder()).forEach { p ->
-                    clearDosAttributes(p)
-                    Files.deleteIfExists(p)
-                }
-                return true
-            } catch (_: Exception) {
-                try { Thread.sleep(sleepMs) } catch (_: Exception) {}
-                i++
-            }
-        }
-        return false
-    }
+    private fun countTotalChunks(dims: List<Path>): Long = McaUtils.countTotalChunks(dims)
 }
