@@ -9,6 +9,7 @@ import com.jokerhub.orzmc.world.*
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -77,7 +78,7 @@ object Optimizer {
         } else {
             if (output == null) {
                 val msg = "非原地模式必须指定输出目录"
-                record(Path.of("<none>"), "Output", msg)
+                record(Paths.get("<none>"), "Output", msg)
                 return OptimizeReport(processedChunks = 0, removedChunks = 0, errors = errors)
             }
             try {
@@ -250,7 +251,7 @@ object Optimizer {
         } else {
             if (zipOutput) {
                 val ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                val parent = out.parent ?: Path.of(".")
+                val parent = out.parent ?: Paths.get(".")
                 val zipPath = parent.resolve("$ts.zip")
                 try {
                     emit(ProgressStage.Compress, null, null, out, null)

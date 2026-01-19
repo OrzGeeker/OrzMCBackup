@@ -92,7 +92,7 @@ signing {
     if (!key.isNullOrBlank()) {
         val decoded = runCatching {
             String(Base64.getDecoder().decode(key), Charsets.UTF_8)
-        }.getOrElse { key!! }
+        }.getOrElse { key }
         useInMemoryPgpKeys(normalizedKeyId, decoded, password)
         sign(publishing.publications["mavenJava"])
     }

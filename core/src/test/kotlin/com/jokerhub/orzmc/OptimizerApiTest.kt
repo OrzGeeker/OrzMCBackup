@@ -57,7 +57,7 @@ class OptimizerApiTest {
         val tmpWorld = Files.createTempDirectory("optimizer-world-bad-")
         copyDir(fixture, tmpWorld)
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
-        Files.writeString(bad, "x")
+        Files.write(bad, "x".toByteArray(Charsets.UTF_8))
         val tmpOut = Files.createTempDirectory("optimizer-out-bad-")
         val report = Optimizer.runWithReport(
             input = tmpWorld,
@@ -83,7 +83,7 @@ class OptimizerApiTest {
         assertTrue(url != null)
         val input = Paths.get(url!!.toURI())
         val tmpOut = Files.createTempDirectory("optimizer-out-nonempty-")
-        Files.writeString(tmpOut.resolve("dummy.txt"), "a")
+        Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
         val report = Optimizer.runWithReport(
             input = input,
             output = tmpOut,

@@ -74,11 +74,12 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
   ```
 
 ## 测试
-- 运行测试：
-
+- 测试
   ```bash
   ./gradlew :core:test --no-daemon
   ```
+- CI 多版本测试矩阵：JDK 8/11/17/21 在推送与 PR 自动运行
+  - 工作流：[test-matrix.yml](file:///Users/bytedance/Documents/OrzMC/tools/OrzMCBackup/.github/workflows/test-matrix.yml)
 
 - 测试数据：建议将 Fixtures 目录纳入版本控制（位置：core/src/test/resources/Fixtures），示例文件：
   - Fixtures/world/region/r.0.0.mca

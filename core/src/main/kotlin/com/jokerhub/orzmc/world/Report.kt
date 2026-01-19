@@ -1,5 +1,8 @@
 package com.jokerhub.orzmc.world
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
 data class OptimizeError(
     val path: String,
     val kind: String,
@@ -67,9 +70,9 @@ object ReportIO {
             else -> toJson(r)
         }
         val parent = path.parent
-        if (parent != null && !java.nio.file.Files.isDirectory(parent)) {
-            java.nio.file.Files.createDirectories(parent)
+        if (parent != null && !Files.isDirectory(parent)) {
+            Files.createDirectories(parent)
         }
-        java.nio.file.Files.writeString(path, content, java.nio.charset.StandardCharsets.UTF_8)
+        Files.write(path, content.toByteArray(StandardCharsets.UTF_8))
     }
 }
