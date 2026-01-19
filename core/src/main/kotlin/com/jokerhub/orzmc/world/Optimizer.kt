@@ -11,6 +11,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.DosFileAttributeView
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
@@ -244,7 +245,8 @@ object Optimizer {
                 }
             }
             try {
-                Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                val ok = deleteTreeWithRetry(out, 5, 500)
+                if (!ok) throw IOException("cleanup failed")
             } catch (e: IOException) {
                 throw InPlaceReplacementException("清理临时目录失败：${out}", e)
             }
@@ -276,7 +278,8 @@ object Optimizer {
                 }
                 try {
                     emit(ProgressStage.Cleanup, null, null, out, null)
-                    Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                    val ok = deleteTreeWithRetry(out, 5, 500)
+                    if (!ok) throw IOException("cleanup failed")
                 } catch (e: IOException) {
                     val msg = "删除输出目录失败：${out}"
                     record(out, "Cleanup", msg)
@@ -328,5 +331,32 @@ object Optimizer {
         return try { NbtForceLoader.parse(f) } catch (e: Exception) {
             if (strict) throw ForceLoadedParseException("解析强制加载列表失败：${f}", e) else emptyList()
         }
+    }
+
+    private fun clearDosAttributes(p: Path) {
+        try {
+            val v = Files.getFileAttributeView(p, DosFileAttributeView::class.java)
+            if (v != null) {
+                try { v.setReadOnly(false) } catch (_: Exception) {}
+                try { v.setHidden(false) } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun deleteTreeWithRetry(root: Path, attempts: Int, sleepMs: Long): Boolean {
+        var i = 0
+        while (i < attempts) {
+            try {
+                Files.walk(root).sorted(Comparator.reverseOrder()).forEach { p ->
+                    clearDosAttributes(p)
+                    Files.deleteIfExists(p)
+                }
+                return true
+            } catch (_: Exception) {
+                try { Thread.sleep(sleepMs) } catch (_: Exception) {}
+                i++
+            }
+        }
+        return false
     }
 }
