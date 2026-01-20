@@ -9,40 +9,7 @@ import java.nio.file.Paths
 enum class ProgressMode { Off, Global, Region }
 
 object Optimizer {
-    @JvmStatic
-    fun run(
-        input: Path,
-        output: Path?,
-        inhabitedThresholdSeconds: Long,
-        removeUnknown: Boolean,
-        progressMode: ProgressMode = ProgressMode.Region,
-        zipOutput: Boolean = false,
-        inPlace: Boolean = false,
-        force: Boolean = false,
-        strict: Boolean = false,
-        progressInterval: Long = 1000,
-        progressIntervalMs: Long = 0,
-        onError: ((OptimizeError) -> Unit)? = null,
-        onProgress: ((ProgressEvent) -> Unit)? = null,
-    ): OptimizeReport {
-        val config = OptimizerConfig(
-            input = input,
-            output = output,
-            inhabitedThresholdSeconds = inhabitedThresholdSeconds,
-            removeUnknown = removeUnknown,
-            progressMode = progressMode,
-            zipOutput = zipOutput,
-            inPlace = inPlace,
-            force = force,
-            strict = strict,
-            progressInterval = progressInterval,
-            progressIntervalMs = progressIntervalMs,
-            onError = onError,
-            onProgress = onProgress,
-            parallelism = 1
-        )
-        return run(config)
-    }
+    
 
 
     private fun isDimensionDir(fs: FileSystem, path: Path): Boolean = fs.isDirectory(path.resolve("region"))
