@@ -63,52 +63,66 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
   }
   ```
 
-- 核心 API 调用示例（旧签名）：
-
-  ```kotlin
-  import com.jokerhub.orzmc.world.Optimizer
-  import com.jokerhub.orzmc.world.ProgressMode
-  import java.nio.file.Path
-
-  fun optimize() {
-      val input = Path.of("/path/to/world")
-      val output = Path.of("/path/to/out")
-      Optimizer.run(
-          input = input,
-          output = output,           // 原地处理时传 null
-          inhabitedThresholdSeconds = 600,
-          removeUnknown = false,
-          progressMode = ProgressMode.Global,
-      )
-  }
-  ```
-
-- 基于 OptimizerConfig 的调用示例（推荐）：
+- 核心 API 调用示例（run(config)）：
 
   ```kotlin
   import com.jokerhub.orzmc.world.*
-  import java.nio.file.Path
+  import java.nio.file.Paths
 
-  fun optimizeWithConfig() {
-      val config = OptimizerConfig(
-          input = Path.of("/path/to/world"),
-          output = Path.of("/path/to/out"),
+  fun optimize() {
+      val cfg = OptimizerConfig(
+          input = Paths.get("/path/to/world"),
+          output = Paths.get("/path/to/out"),
           inhabitedThresholdSeconds = 600,
           removeUnknown = false,
-          progressMode = ProgressMode.Region,
+          progressMode = ProgressMode.Global,
           zipOutput = false,
           inPlace = false,
           force = true,
           strict = false,
           progressInterval = 1000,
           progressIntervalMs = 0,
-          onError = { e -> println(e) },
-          onProgress = null,
-          parallelism = 2,
-          progressSink = CallbackProgressSink { e -> println(e) },
-          reportSink = FileReportSink(Path.of("/path/to/report.json"), "json")
+          onError = { e -> println("Error: $e") },
+          onProgress = { e ->
+              if (e.stage == ProgressStage.ChunkProgress) {
+                  val cur = e.current ?: 0
+                  val tot = e.total ?: 0
+                  val pct = if (tot > 0) (cur * 100) / tot else 0
+                  println("进度：$pct%（$cur/$tot）")
+              }
+          },
+          parallelism = 2
       )
-      val report = Optimizer.runWithReport(config)
+      val report = Optimizer.run(cfg)
+      println(ReportIO.toJson(report))
+  }
+  ```
+
+- 原地处理与压缩输出示例：
+
+  ```kotlin
+  import com.jokerhub.orzmc.world.*
+  import java.nio.file.Paths
+
+  fun inplaceAndZip() {
+      val config = OptimizerConfig(
+          input = Paths.get("/path/to/world"),
+          output = Paths.get("/path/to/out"),
+          inhabitedThresholdSeconds = 300,
+          removeUnknown = false,
+          progressMode = ProgressMode.Global,
+          zipOutput = true,
+          inPlace = false,
+          force = false,
+          strict = false,
+          progressInterval = 500,
+          progressIntervalMs = 0,
+          onError = { e -> println("Error: $e") },
+          onProgress = { e -> println(e) },
+          parallelism = 1,
+          reportSink = FileReportSink(Paths.get("/path/to/report.json"), "json")
+      )
+      val report = Optimizer.run(config)
       println(ReportIO.toJson(report))
   }
   ```

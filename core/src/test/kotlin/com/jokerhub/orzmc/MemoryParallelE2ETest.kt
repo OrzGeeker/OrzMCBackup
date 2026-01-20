@@ -45,7 +45,7 @@ class MemoryParallelE2ETest {
             input = world,
             output = out,
             inhabitedThresholdSeconds = 100,
-            removeUnknown = false,
+            removeUnknown = true,
             fs = fs,
             ioFactory = MemoryMcaIOFactory(),
             parallelism = 3,
