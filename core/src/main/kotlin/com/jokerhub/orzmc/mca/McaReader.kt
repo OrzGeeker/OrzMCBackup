@@ -6,7 +6,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.regex.Pattern
 
-class McaReader(private val file: RandomAccessFile, private val path: String, val xPos: Int, val zPos: Int) {
+class McaReader(private val file: RandomAccess, private val path: String, val xPos: Int, val zPos: Int) {
     private var offsets: IntArray? = null
     private var sizes: IntArray? = null
     private var timestamps: IntArray? = null
@@ -19,7 +19,15 @@ class McaReader(private val file: RandomAccessFile, private val path: String, va
             val x = m.group(1).toInt()
             val z = m.group(2).toInt()
             val raf = RandomAccessFile(File(path), "r")
-            return McaReader(raf, path, x, z)
+            return McaReader(RafAccess(raf), path, x, z)
+        }
+
+        fun openFromBytes(path: String, bytes: ByteArray): McaReader {
+            val m = FILENAME_RE.matcher(path)
+            require(m.find()) { "invalid mca filename: $path" }
+            val x = m.group(1).toInt()
+            val z = m.group(2).toInt()
+            return McaReader(MemoryAccess(bytes), path, x, z)
         }
     }
 
@@ -64,7 +72,17 @@ class McaReader(private val file: RandomAccessFile, private val path: String, va
             val size = sizesArr[i]
             val t = ts[i]
             if (off == 0 || size == 0) continue
-            out.add(McaEntry(file = RandomAccessFile(File(path), "r"), start = off.toLong(), length = size, index = i, modified = t, regionX = xPos, regionZ = zPos))
+            out.add(
+                McaEntry(
+                    file = file,
+                    start = off.toLong(),
+                    length = size,
+                    index = i,
+                    modified = t,
+                    regionX = xPos,
+                    regionZ = zPos
+                )
+            )
         }
         return out
     }
@@ -75,6 +93,6 @@ class McaReader(private val file: RandomAccessFile, private val path: String, va
         val size = sizes!![index]
         val ts = timestamps!![index]
         if (off == 0 || size == 0) return null
-        return McaEntry(RandomAccessFile(File(path), "r"), off.toLong(), size, index, ts, xPos, zPos)
+        return McaEntry(file, off.toLong(), size, index, ts, xPos, zPos)
     }
 }

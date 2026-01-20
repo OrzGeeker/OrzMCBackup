@@ -59,7 +59,7 @@ class OptimizerApiTest {
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
         Files.write(bad, "x".toByteArray(Charsets.UTF_8))
         val tmpOut = Files.createTempDirectory("optimizer-out-bad-")
-        val report = Optimizer.runWithReport(
+        val report = Optimizer.run(
             input = tmpWorld,
             output = tmpOut,
             inhabitedThresholdSeconds = 0,
@@ -84,7 +84,7 @@ class OptimizerApiTest {
         val input = Paths.get(url!!.toURI())
         val tmpOut = Files.createTempDirectory("optimizer-out-nonempty-")
         Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
-        val report = Optimizer.runWithReport(
+        val report = Optimizer.run(
             input = input,
             output = tmpOut,
             inhabitedThresholdSeconds = 0,
@@ -106,7 +106,7 @@ class OptimizerApiTest {
         assertTrue(url != null)
         val input = Paths.get(url!!.toURI())
         val events = mutableListOf<ProgressEvent>()
-        val report = Optimizer.runWithReport(
+        val report = Optimizer.run(
             input = input,
             output = Files.createTempDirectory("optimizer-out-progress-"),
             inhabitedThresholdSeconds = 0,
@@ -130,7 +130,7 @@ class OptimizerApiTest {
         assertTrue(url != null)
         val input = Paths.get(url!!.toURI())
         val events = mutableListOf<ProgressEvent>()
-        val report = Optimizer.runWithReport(
+        val report = Optimizer.run(
             input = input,
             output = Files.createTempDirectory("optimizer-out-progress-ms-"),
             inhabitedThresholdSeconds = 0,
@@ -142,7 +142,7 @@ class OptimizerApiTest {
             strict = false,
             progressInterval = 100000, // ensure chunk-based won't fire
             progressIntervalMs = 5,
-            onProgress = { e -> events.add(e) }
+            onProgress = { e: ProgressEvent -> events.add(e) }
         )
         assertTrue(events.any { it.stage == ProgressStage.Done })
         assertTrue(events.any { it.stage == ProgressStage.ChunkProgress })

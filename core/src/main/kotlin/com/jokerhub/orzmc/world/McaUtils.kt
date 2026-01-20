@@ -5,21 +5,24 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 object McaUtils {
-    fun isValidMca(path: Path): Boolean {
-        return try { Files.size(path) >= 8192 } catch (_: Exception) { false }
+    fun isValidMca(fs: FileSystem, path: Path): Boolean {
+        return try {
+            Files.size(fs.toRealPath(path)) >= 8192
+        } catch (_: Exception) {
+            false
+        }
     }
 
-    fun countTotalChunks(dims: List<Path>): Long {
+    fun countTotalChunks(fs: FileSystem, dims: List<Path>): Long {
         var total = 0L
         for (dim in dims) {
             val regionDir = dim.resolve("region")
-            if (!Files.isDirectory(regionDir)) continue
-            Files.list(regionDir).use { s ->
-                s.filter { it.toString().endsWith(".mca") && isValidMca(it) }.forEach { p ->
-                    try {
-                        val r = McaReader.open(p.toString())
-                        total += r.entries().size
-                    } catch (_: Exception) { }
+            if (!fs.isDirectory(regionDir)) continue
+            fs.list(regionDir).filter { it.toString().endsWith(".mca") && isValidMca(fs, it) }.forEach { p ->
+                try {
+                    val r = McaReader.open(fs.toRealPath(p).toString())
+                    total += r.entries().size
+                } catch (_: Exception) {
                 }
             }
         }

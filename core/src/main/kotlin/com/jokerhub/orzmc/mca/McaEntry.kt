@@ -1,15 +1,13 @@
 package com.jokerhub.orzmc.mca
 
-import java.io.RandomAccessFile
+import net.jpountz.xxhash.XXHashFactory
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
-import net.jpountz.xxhash.XXHashFactory
-import net.jpountz.lz4.LZ4Factory
 
 class McaEntry(
-    private val file: RandomAccessFile,
+    private val file: RandomAccess,
     private val start: Long,
     private val length: Int,
     private val index: Int,
@@ -116,7 +114,9 @@ class McaEntry(
             val out = java.io.ByteArrayOutputStream()
             val lz4 = net.jpountz.lz4.LZ4Factory.safeInstance().safeDecompressor()
             while (i + LZ4_HEADER_LEN <= inp.size) {
-                if (!inp.copyOfRange(i, i + 8).contentEquals(LZ4_MAGIC)) throw IllegalArgumentException("invalid LZ4 magic")
+                if (!inp.copyOfRange(i, i + 8)
+                        .contentEquals(LZ4_MAGIC)
+                ) throw IllegalArgumentException("invalid LZ4 magic")
                 val token = inp[i + 8].toInt()
                 val method = token and 0xF0
                 val compLen = ByteBuffer.wrap(inp, i + 9, 4).order(ByteOrder.LITTLE_ENDIAN).int
@@ -132,6 +132,7 @@ class McaEntry(
                         lz4.decompress(block, 0, block.size, dest, 0)
                         dest
                     }
+
                     else -> throw IllegalArgumentException("unsupported LZ4 method")
                 }
                 val checksum = (xxh32(decoded, LZ4_XXHASH_SEED) and 0x0FFFFFFF)

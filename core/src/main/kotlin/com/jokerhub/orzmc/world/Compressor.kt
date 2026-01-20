@@ -16,11 +16,7 @@ object Compressor {
             Files.walk(root).forEach { p ->
                 val rel = root.relativize(p)
                 if (rel.toString().isEmpty()) return@forEach
-                if (Files.isDirectory(p)) {
-                    val name = rel.toString().trimEnd('/') + "/"
-                    zos.putNextEntry(ZipEntry(name))
-                    zos.closeEntry()
-                } else {
+                if (!Files.isDirectory(p)) {
                     zos.putNextEntry(ZipEntry(rel.toString()))
                     Files.copy(p, zos)
                     zos.closeEntry()
