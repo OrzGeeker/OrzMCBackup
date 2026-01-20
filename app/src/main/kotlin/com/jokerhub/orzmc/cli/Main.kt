@@ -105,6 +105,37 @@ class Main : Callable<Int> {
     override fun call(): Int {
         return try {
             val sink = reportFile?.let { FileReportSink(it, reportFormat) }
+            val progressPrinter: ((ProgressEvent) -> Unit)? = when (progressMode) {
+                ProgressMode.Off -> null
+                else -> { e ->
+                    when (e.stage) {
+                        ProgressStage.Init -> println("开始")
+                        ProgressStage.Discover -> {
+                            val t = e.total ?: 0
+                            println("扫描与统计区块，总数：$t")
+                        }
+                        ProgressStage.DimensionStart -> println("处理维度：${e.path}")
+                        ProgressStage.RegionStart -> if (progressMode == ProgressMode.Region) println("处理区块文件：${e.path}")
+                        ProgressStage.ChunkProgress -> {
+                            val cur = e.current ?: 0
+                            val tot = e.total ?: 0
+                            if (progressMode == ProgressMode.Global) {
+                                val percent = if (tot > 0) (cur * 100) / tot else 0
+                                println("进度：$percent%（$cur/$tot）")
+                            }
+                        }
+                        ProgressStage.Finalize -> println("完成写入：${e.path}")
+                        ProgressStage.Compress -> println("压缩输出目录")
+                        ProgressStage.Cleanup -> println("清理输出目录")
+                        ProgressStage.DimensionEnd -> println("维度完成：${e.path}")
+                        ProgressStage.Done -> {
+                            val cur = e.current ?: 0
+                            val tot = e.total ?: 0
+                            println("完成：$cur/$tot")
+                        }
+                    }
+                }
+            }
             val config = OptimizerConfig(
                 input = input,
                 output = output,
@@ -118,9 +149,9 @@ class Main : Callable<Int> {
                 progressInterval = progressInterval,
                 progressIntervalMs = progressIntervalMs,
                 onError = null,
-                onProgress = null,
+                onProgress = progressPrinter,
                 parallelism = parallelism,
-                progressSink = CallbackProgressSink(null),
+                progressSink = null,
                 reportSink = sink
             )
             val r = Optimizer.run(config)

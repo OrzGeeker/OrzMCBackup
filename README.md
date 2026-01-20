@@ -1,6 +1,8 @@
 # OrzMCBackup
 
 [![release-lib](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/release-lib.yml/badge.svg)](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/release-lib.yml)
+[![release-app](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/release-app.yml/badge.svg)](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/release-app.yml)
+[![test-matrix](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/test-matrix.yml/badge.svg)](https://github.com/OrzGeeker/OrzMCBackup/actions/workflows/test-matrix.yml)
 
 Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描各维度的 region/entities/poi MCA 文件，根据 InhabitedTime
 阈值与强制加载列表（chunks.dat）保留区块并重写输出，同时支持进度与可选压缩输出。
