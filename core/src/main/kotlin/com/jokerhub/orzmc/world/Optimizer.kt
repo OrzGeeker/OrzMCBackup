@@ -229,6 +229,32 @@ object Optimizer {
                 throw InPlaceReplacementException("清理临时目录失败：${out}", e)
             }
         } else {
+            if (config.copyMisc) {
+                tasks.forEach { dim ->
+                    val rel = input.relativize(dim)
+                    val outDim = out.resolve(rel)
+                    fs.createDirectories(outDim)
+                    val reserved = setOf("region", "entities", "poi")
+                    fs.walk(dim).forEach { p ->
+                        if (p == dim) return@forEach
+                        val r = dim.relativize(p).toString()
+                        if (r.isEmpty()) return@forEach
+                        val top = r.substringBefore("/")
+                        if (reserved.contains(top)) return@forEach
+                        val target = outDim.resolve(r)
+                        if (fs.isDirectory(p)) {
+                            fs.createDirectories(target)
+                        } else {
+                            try {
+                                fs.createDirectories(target.parent ?: outDim)
+                            } catch (_: Exception) {}
+                            try {
+                                fs.copy(p, target, true)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
             if (zipOutput) {
                 try {
                     emit(ProgressStage.Compress, null, null, out, null)

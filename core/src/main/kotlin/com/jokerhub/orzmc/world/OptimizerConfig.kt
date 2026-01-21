@@ -17,6 +17,7 @@ data class OptimizerConfig(
     val onError: ((OptimizeError) -> Unit)? = null,
     val onProgress: ((ProgressEvent) -> Unit)? = null,
     val parallelism: Int = 1,
+    val copyMisc: Boolean = true,
     val progressSink: ProgressSink? = null,
     val reportSink: ReportSink? = null,
     val fs: FileSystem = RealFileSystem,
