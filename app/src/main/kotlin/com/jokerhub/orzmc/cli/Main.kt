@@ -101,6 +101,8 @@ class Main : Callable<Int> {
 
     @Option(names = ["--parallelism"], description = ["Parallel dimension processing threads"], defaultValue = "1")
     var parallelism: Int = 1
+    @Option(names = ["--copy-misc"], description = ["Copy non-region/entities/poi files and folders in each dimension"], defaultValue = "true", negatable = true)
+    var copyMisc: Boolean = true
 
     override fun call(): Int {
         return try {
@@ -151,6 +153,7 @@ class Main : Callable<Int> {
                 onError = null,
                 onProgress = progressPrinter,
                 parallelism = parallelism,
+                copyMisc = copyMisc,
                 progressSink = null,
                 reportSink = sink
             )

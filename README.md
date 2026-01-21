@@ -46,6 +46,7 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
 - --progress-interval：进度回调的区块粒度（默认 1000）
 - --progress-interval-ms：进度回调的时间粒度，>0 时优先使用（默认 0）
 - --parallelism：并行处理维度的线程数（默认 1）
+- --copy-misc：非原地模式下，将每个维度目录中除 region/entities/poi 以外的文件与文件夹复制到输出对应维度目录（默认 true；支持否定形式：--copy-misc=false 或 --no-copy-misc）
 
 ## 作为库使用
 
