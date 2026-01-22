@@ -11,13 +11,16 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import com.jokerhub.orzmc.world.Cleaner
 import com.jokerhub.orzmc.util.TestPaths
-import com.jokerhub.orzmc.world.McaUtils
-import com.jokerhub.orzmc.world.RealFileSystem
+import com.jokerhub.orzmc.util.TestTmp
 
 class OptimizerApiTest {
     private fun logInput(input: Path) {
         val region = input.resolve("region")
         println("Input: $input exists=${Files.exists(input)} region=$region exists=${Files.exists(region)}")
+        if (Files.exists(region)) {
+            val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+            println("region/*.mca count: $mcaCount")
+        }
     }
     private fun copyDir(src: Path, dst: Path) {
         Files.createDirectories(dst)
@@ -36,10 +39,10 @@ class OptimizerApiTest {
     fun `run with empty output directory returns report with progress`() {
         val input = TestPaths.world()
         logInput(input)
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
-        val tmpOut = Files.createTempDirectory("optimizer-out-")
+        val region = input.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        assertTrue(mcaCount > 0)
+        val tmpOut = TestTmp.createTempDirectory("optimizer-out-")
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
                 input = input,
@@ -69,14 +72,14 @@ class OptimizerApiTest {
     fun `strict mode collects errors for damaged mca`() {
         val fixture = TestPaths.world()
         logInput(fixture)
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(fixture))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
-        val tmpWorld = Files.createTempDirectory("optimizer-world-bad-")
+        val region = fixture.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        assertTrue(mcaCount > 0)
+        val tmpWorld = TestTmp.createTempDirectory("optimizer-world-bad-")
         copyDir(fixture, tmpWorld)
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
         Files.write(bad, "x".toByteArray(Charsets.UTF_8))
-        val tmpOut = Files.createTempDirectory("optimizer-out-bad-")
+        val tmpOut = TestTmp.createTempDirectory("optimizer-out-bad-")
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
                 input = tmpWorld,
@@ -105,10 +108,10 @@ class OptimizerApiTest {
     fun `non-empty output without force returns report with output error`() {
         val input = TestPaths.world()
         logInput(input)
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
-        val tmpOut = Files.createTempDirectory("optimizer-out-nonempty-")
+        val region = input.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        assertTrue(mcaCount > 0)
+        val tmpOut = TestTmp.createTempDirectory("optimizer-out-nonempty-")
         Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -132,14 +135,14 @@ class OptimizerApiTest {
     fun `progress callback by chunks is emitted`() {
         val input = TestPaths.world()
         logInput(input)
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
+        val region = input.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        assertTrue(mcaCount > 0)
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
                 input = input,
-                output = Files.createTempDirectory("optimizer-out-progress-"),
+                output = TestTmp.createTempDirectory("optimizer-out-progress-"),
                 inhabitedThresholdSeconds = 0,
                 removeUnknown = false,
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
@@ -165,14 +168,14 @@ class OptimizerApiTest {
     fun `progress callback by time is emitted`() {
         val input = TestPaths.world()
         logInput(input)
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
+        val region = input.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        assertTrue(mcaCount > 0)
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
                 input = input,
-                output = Files.createTempDirectory("optimizer-out-progress-ms-"),
+                output = TestTmp.createTempDirectory("optimizer-out-progress-ms-"),
                 inhabitedThresholdSeconds = 0,
                 removeUnknown = false,
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,

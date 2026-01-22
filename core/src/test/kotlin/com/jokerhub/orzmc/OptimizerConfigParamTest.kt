@@ -8,8 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import com.jokerhub.orzmc.world.Cleaner
 import com.jokerhub.orzmc.util.TestPaths
-import com.jokerhub.orzmc.world.McaUtils
-import com.jokerhub.orzmc.world.RealFileSystem
+import com.jokerhub.orzmc.util.TestTmp
 
 class OptimizerConfigParamTest {
     @ParameterizedTest
@@ -21,10 +20,11 @@ class OptimizerConfigParamTest {
     )
     fun `run with OptimizerConfig combinations`(removeUnknown: Boolean, parallelism: Int) {
         val input = TestPaths.world()
-        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
-        println("TOTAL CHUNKS: $total")
-        assertTrue(total > 0)
-        val out = Files.createTempDirectory("optimizer-config-out-")
+        val region = input.resolve("region")
+        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        println("region/*.mca count: $mcaCount")
+        assertTrue(mcaCount > 0)
+        val out = TestTmp.createTempDirectory("optimizer-config-out-")
         val events = mutableListOf<ProgressEvent>()
         val config = OptimizerConfig(
             input = input,
