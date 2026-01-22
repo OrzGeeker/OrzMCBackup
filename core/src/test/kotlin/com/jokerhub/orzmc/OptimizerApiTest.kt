@@ -6,6 +6,7 @@ import com.jokerhub.orzmc.world.ProgressStage
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.FileSystemException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -14,12 +15,22 @@ import com.jokerhub.orzmc.util.TestPaths
 import com.jokerhub.orzmc.util.TestTmp
 
 class OptimizerApiTest {
+    private fun fsFail(e: FileSystemException): Nothing {
+        val msg = "FileSystemException: file=${e.file} other=${e.otherFile} reason=${e.reason} msg=${e.message}"
+        System.err.println(msg)
+        throw AssertionError(msg, e)
+    }
+
     private fun logInput(input: Path) {
         val region = input.resolve("region")
-        println("Input: $input exists=${Files.exists(input)} region=$region exists=${Files.exists(region)}")
+        System.err.println("Input: $input exists=${Files.exists(input)} region=$region exists=${Files.exists(region)}")
         if (Files.exists(region)) {
-            val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
-            println("region/*.mca count: $mcaCount")
+            val mcaCount = try {
+                Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+            } catch (e: FileSystemException) {
+                fsFail(e)
+            }
+            System.err.println("region/*.mca count: $mcaCount")
         }
     }
     private fun copyDir(src: Path, dst: Path) {
@@ -40,28 +51,36 @@ class OptimizerApiTest {
         val input = TestPaths.world()
         logInput(input)
         val region = input.resolve("region")
-        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        val mcaCount = try {
+            Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(mcaCount > 0)
         val tmpOut = TestTmp.createTempDirectory("optimizer-out-")
-        val report = Optimizer.run(
-            com.jokerhub.orzmc.world.OptimizerConfig(
-                input = input,
-                output = tmpOut,
-                inhabitedThresholdSeconds = 0,
-                removeUnknown = false,
-                progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
-                zipOutput = false,
-                inPlace = false,
-                force = true,
-                strict = false,
-                progressInterval = 10,
-                onProgress = { e ->
-                    if (e.stage == ProgressStage.Discover) {
-                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+        val report = try {
+            Optimizer.run(
+                com.jokerhub.orzmc.world.OptimizerConfig(
+                    input = input,
+                    output = tmpOut,
+                    inhabitedThresholdSeconds = 0,
+                    removeUnknown = false,
+                    progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
+                    zipOutput = false,
+                    inPlace = false,
+                    force = true,
+                    strict = false,
+                    progressInterval = 10,
+                    onProgress = { e ->
+                        if (e.stage == ProgressStage.Discover) {
+                            System.err.println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                        }
                     }
-                }
+                )
             )
-        )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(report.processedChunks > 0)
         assertTrue(report.errors.isEmpty())
         Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
@@ -73,32 +92,40 @@ class OptimizerApiTest {
         val fixture = TestPaths.world()
         logInput(fixture)
         val region = fixture.resolve("region")
-        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        val mcaCount = try {
+            Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(mcaCount > 0)
         val tmpWorld = TestTmp.createTempDirectory("optimizer-world-bad-")
         copyDir(fixture, tmpWorld)
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
         Files.write(bad, "x".toByteArray(Charsets.UTF_8))
         val tmpOut = TestTmp.createTempDirectory("optimizer-out-bad-")
-        val report = Optimizer.run(
-            com.jokerhub.orzmc.world.OptimizerConfig(
-                input = tmpWorld,
-                output = tmpOut,
-                inhabitedThresholdSeconds = 0,
-                removeUnknown = false,
-                progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
-                zipOutput = false,
-                inPlace = false,
-                force = false,
-                strict = true,
-                progressInterval = 10,
-                onProgress = { e ->
-                    if (e.stage == ProgressStage.Discover) {
-                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+        val report = try {
+            Optimizer.run(
+                com.jokerhub.orzmc.world.OptimizerConfig(
+                    input = tmpWorld,
+                    output = tmpOut,
+                    inhabitedThresholdSeconds = 0,
+                    removeUnknown = false,
+                    progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
+                    zipOutput = false,
+                    inPlace = false,
+                    force = false,
+                    strict = true,
+                    progressInterval = 10,
+                    onProgress = { e ->
+                        if (e.stage == ProgressStage.Discover) {
+                            System.err.println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                        }
                     }
-                }
+                )
             )
-        )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(report.errors.any { it.kind == "MCA" })
         Cleaner.deleteTreeWithRetry(tmpWorld, 5, 10)
         Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
@@ -109,23 +136,31 @@ class OptimizerApiTest {
         val input = TestPaths.world()
         logInput(input)
         val region = input.resolve("region")
-        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        val mcaCount = try {
+            Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(mcaCount > 0)
         val tmpOut = TestTmp.createTempDirectory("optimizer-out-nonempty-")
         Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
-        val report = Optimizer.run(
-            com.jokerhub.orzmc.world.OptimizerConfig(
-                input = input,
-                output = tmpOut,
-                inhabitedThresholdSeconds = 0,
-                removeUnknown = false,
-                progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
-                zipOutput = false,
-                inPlace = false,
-                force = false,
-                strict = false
+        val report = try {
+            Optimizer.run(
+                com.jokerhub.orzmc.world.OptimizerConfig(
+                    input = input,
+                    output = tmpOut,
+                    inhabitedThresholdSeconds = 0,
+                    removeUnknown = false,
+                    progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
+                    zipOutput = false,
+                    inPlace = false,
+                    force = false,
+                    strict = false
+                )
             )
-        )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertEquals(0, report.processedChunks)
         assertTrue(report.errors.any { it.kind == "Output" })
         Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
@@ -136,29 +171,37 @@ class OptimizerApiTest {
         val input = TestPaths.world()
         logInput(input)
         val region = input.resolve("region")
-        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        val mcaCount = try {
+            Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(mcaCount > 0)
         val events = mutableListOf<ProgressEvent>()
-        val report = Optimizer.run(
-            com.jokerhub.orzmc.world.OptimizerConfig(
-                input = input,
-                output = TestTmp.createTempDirectory("optimizer-out-progress-"),
-                inhabitedThresholdSeconds = 0,
-                removeUnknown = false,
-                progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
-                zipOutput = false,
-                inPlace = false,
-                force = false,
-                strict = false,
-                progressInterval = 100,
-                onProgress = { e ->
-                    events.add(e)
-                    if (e.stage == ProgressStage.Discover) {
-                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+        val report = try {
+            Optimizer.run(
+                com.jokerhub.orzmc.world.OptimizerConfig(
+                    input = input,
+                    output = TestTmp.createTempDirectory("optimizer-out-progress-"),
+                    inhabitedThresholdSeconds = 0,
+                    removeUnknown = false,
+                    progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
+                    zipOutput = false,
+                    inPlace = false,
+                    force = false,
+                    strict = false,
+                    progressInterval = 100,
+                    onProgress = { e ->
+                        events.add(e)
+                        if (e.stage == ProgressStage.Discover) {
+                            System.err.println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                        }
                     }
-                }
+                )
             )
-        )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(events.any { it.stage == ProgressStage.Done })
         assertTrue(events.any { it.stage == ProgressStage.ChunkProgress })
         assertTrue(report.processedChunks > 0)
@@ -169,30 +212,38 @@ class OptimizerApiTest {
         val input = TestPaths.world()
         logInput(input)
         val region = input.resolve("region")
-        val mcaCount = Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        val mcaCount = try {
+            Files.list(region).use { s -> s.filter { it.fileName.toString().endsWith(".mca") }.count() }
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(mcaCount > 0)
         val events = mutableListOf<ProgressEvent>()
-        val report = Optimizer.run(
-            com.jokerhub.orzmc.world.OptimizerConfig(
-                input = input,
-                output = TestTmp.createTempDirectory("optimizer-out-progress-ms-"),
-                inhabitedThresholdSeconds = 0,
-                removeUnknown = false,
-                progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
-                zipOutput = false,
-                inPlace = false,
-                force = false,
-                strict = false,
-                progressInterval = 100000, // ensure chunk-based won't fire
-                progressIntervalMs = 5,
-                onProgress = { e: ProgressEvent ->
-                    events.add(e)
-                    if (e.stage == ProgressStage.Discover) {
-                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+        val report = try {
+            Optimizer.run(
+                com.jokerhub.orzmc.world.OptimizerConfig(
+                    input = input,
+                    output = TestTmp.createTempDirectory("optimizer-out-progress-ms-"),
+                    inhabitedThresholdSeconds = 0,
+                    removeUnknown = false,
+                    progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
+                    zipOutput = false,
+                    inPlace = false,
+                    force = false,
+                    strict = false,
+                    progressInterval = 100000, // ensure chunk-based won't fire
+                    progressIntervalMs = 5,
+                    onProgress = { e: ProgressEvent ->
+                        events.add(e)
+                        if (e.stage == ProgressStage.Discover) {
+                            System.err.println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                        }
                     }
-                }
+                )
             )
-        )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
         assertTrue(events.any { it.stage == ProgressStage.Done })
         assertTrue(events.any { it.stage == ProgressStage.ChunkProgress })
         assertTrue(report.processedChunks > 0)
