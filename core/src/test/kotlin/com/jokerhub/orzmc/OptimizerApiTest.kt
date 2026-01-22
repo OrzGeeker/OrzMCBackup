@@ -49,7 +49,6 @@ class OptimizerApiTest {
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
                 zipOutput = false,
                 inPlace = false,
-                copyMisc = false,
                 force = true,
                 strict = false,
                 progressInterval = 10,
@@ -87,7 +86,6 @@ class OptimizerApiTest {
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
                 zipOutput = false,
                 inPlace = false,
-                copyMisc = false,
                 force = false,
                 strict = true,
                 progressInterval = 10,
@@ -121,7 +119,6 @@ class OptimizerApiTest {
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
                 zipOutput = false,
                 inPlace = false,
-                copyMisc = false,
                 force = false,
                 strict = false
             )
@@ -148,7 +145,6 @@ class OptimizerApiTest {
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
                 zipOutput = false,
                 inPlace = false,
-                copyMisc = false,
                 force = false,
                 strict = false,
                 progressInterval = 100,
@@ -182,7 +178,6 @@ class OptimizerApiTest {
                 progressMode = com.jokerhub.orzmc.world.ProgressMode.Off,
                 zipOutput = false,
                 inPlace = false,
-                copyMisc = false,
                 force = false,
                 strict = false,
                 progressInterval = 100000, // ensure chunk-based won't fire

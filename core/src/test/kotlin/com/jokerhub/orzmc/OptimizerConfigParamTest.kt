@@ -34,7 +34,6 @@ class OptimizerConfigParamTest {
             progressMode = ProgressMode.Off,
             zipOutput = false,
             inPlace = false,
-            copyMisc = false,
             force = true,
             strict = false,
             progressInterval = 100,
