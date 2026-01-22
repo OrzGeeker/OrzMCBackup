@@ -95,8 +95,10 @@ object RealFileSystem : FileSystem {
 }
 
 class MemoryFS : FileSystem {
-    private val dirs = mutableSetOf<Path>()
-    private val files = mutableMapOf<Path, ByteArray>()
+    private val dirs: MutableSet<Path> =
+        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Path, Boolean>())
+    private val files = java.util.concurrent.ConcurrentHashMap<Path, ByteArray>()
+    @Volatile
     private var stagingRoot: Path? = null
     override fun isDirectory(path: Path): Boolean = dirs.contains(path)
     override fun createTempDirectory(prefix: String): Path {
@@ -109,14 +111,17 @@ class MemoryFS : FileSystem {
     override fun list(path: Path): List<Path> {
         val base = path.toString().trimEnd('/')
         val children = mutableListOf<Path>()
-        dirs.forEach {
+        // snapshot to avoid concurrent modification during iteration
+        val dirSnapshot = java.util.ArrayList<Path>(dirs)
+        val fileSnapshot = java.util.ArrayList<Path>(files.keys)
+        dirSnapshot.forEach {
             val rel = it.toString()
             if (rel.startsWith(base) && rel != base) {
                 val child = rel.removePrefix(base + "/")
                 if (!child.contains("/")) children.add(it)
             }
         }
-        files.keys.forEach {
+        fileSnapshot.forEach {
             val rel = it.toString()
             if (rel.startsWith(base) && rel != base) {
                 val child = rel.removePrefix(base + "/")
@@ -129,8 +134,10 @@ class MemoryFS : FileSystem {
     override fun walk(path: Path): List<Path> {
         val base = path.toString().trimEnd('/')
         val all = mutableListOf<Path>()
-        dirs.forEach { if (it.toString().startsWith(base)) all.add(it) }
-        files.keys.forEach { if (it.toString().startsWith(base)) all.add(it) }
+        val dirSnapshot = java.util.ArrayList<Path>(dirs)
+        val fileSnapshot = java.util.ArrayList<Path>(files.keys)
+        dirSnapshot.forEach { if (it.toString().startsWith(base)) all.add(it) }
+        fileSnapshot.forEach { if (it.toString().startsWith(base)) all.add(it) }
         return all
     }
 
@@ -170,7 +177,11 @@ class MemoryFS : FileSystem {
     }
 
     override fun toRealPath(path: Path): Path {
-        if (stagingRoot == null) stagingRoot = RealFileSystem.createTempDirectory("memfs-")
+        if (stagingRoot == null) {
+            synchronized(this) {
+                if (stagingRoot == null) stagingRoot = RealFileSystem.createTempDirectory("memfs-")
+            }
+        }
         val base = stagingRoot!!
         val real = base.resolve(path.toString().removePrefix("/"))
         val parent = real.parent

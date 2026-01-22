@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import picocli.CommandLine
 import java.nio.file.Files
 import java.nio.file.Path
+import com.jokerhub.orzmc.world.Cleaner
 
 class MainCliCopyMiscTest {
     private fun createMinimalWorld(): Pair<Path, Path> {
@@ -36,7 +37,7 @@ class MainCliCopyMiscTest {
         assertTrue(Files.exists(out.resolve("misc").resolve("note.txt")))
         // region should be present as normal output
         assertTrue(Files.exists(out.resolve("region").resolve("r.0.0.mca")))
-        Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        Cleaner.deleteTreeWithRetry(out, 5, 10)
     }
 
     @Test
@@ -55,6 +56,6 @@ class MainCliCopyMiscTest {
         assertFalse(Files.exists(out.resolve("misc").resolve("note.txt")))
         // region should be present as normal output
         assertTrue(Files.exists(out.resolve("region").resolve("r.0.0.mca")))
-        Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        Cleaner.deleteTreeWithRetry(out, 5, 10)
     }
 }

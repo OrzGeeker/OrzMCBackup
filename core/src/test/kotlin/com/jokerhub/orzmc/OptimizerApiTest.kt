@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import com.jokerhub.orzmc.world.Cleaner
+import com.jokerhub.orzmc.util.TestPaths
 
 class OptimizerApiTest {
     private fun copyDir(src: Path, dst: Path) {
@@ -26,9 +28,7 @@ class OptimizerApiTest {
 
     @Test
     fun `run with empty output directory returns report with progress`() {
-        val url = this::class.java.classLoader.getResource("Fixtures/world")
-        assertTrue(url != null)
-        val input = Paths.get(url!!.toURI())
+        val input = TestPaths.world()
         val tmpOut = Files.createTempDirectory("optimizer-out-")
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -47,15 +47,13 @@ class OptimizerApiTest {
         )
         assertTrue(report.processedChunks > 0)
         assertTrue(report.errors.isEmpty())
-        Files.walk(tmpOut).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
     }
 
 
     @Test
     fun `strict mode collects errors for damaged mca`() {
-        val url = this::class.java.classLoader.getResource("Fixtures/world")
-        assertTrue(url != null)
-        val fixture = Paths.get(url!!.toURI())
+        val fixture = TestPaths.world()
         val tmpWorld = Files.createTempDirectory("optimizer-world-bad-")
         copyDir(fixture, tmpWorld)
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
@@ -77,15 +75,13 @@ class OptimizerApiTest {
             )
         )
         assertTrue(report.errors.any { it.kind == "MCA" })
-        Files.walk(tmpWorld).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-        Files.walk(tmpOut).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        Cleaner.deleteTreeWithRetry(tmpWorld, 5, 10)
+        Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
     }
 
     @Test
     fun `non-empty output without force returns report with output error`() {
-        val url = this::class.java.classLoader.getResource("Fixtures/world")
-        assertTrue(url != null)
-        val input = Paths.get(url!!.toURI())
+        val input = TestPaths.world()
         val tmpOut = Files.createTempDirectory("optimizer-out-nonempty-")
         Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
         val report = Optimizer.run(
@@ -103,14 +99,12 @@ class OptimizerApiTest {
         )
         assertEquals(0, report.processedChunks)
         assertTrue(report.errors.any { it.kind == "Output" })
-        Files.walk(tmpOut).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        Cleaner.deleteTreeWithRetry(tmpOut, 5, 10)
     }
 
     @Test
     fun `progress callback by chunks is emitted`() {
-        val url = this::class.java.classLoader.getResource("Fixtures/world")
-        assertTrue(url != null)
-        val input = Paths.get(url!!.toURI())
+        val input = TestPaths.world()
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -134,9 +128,7 @@ class OptimizerApiTest {
 
     @Test
     fun `progress callback by time is emitted`() {
-        val url = this::class.java.classLoader.getResource("Fixtures/world")
-        assertTrue(url != null)
-        val input = Paths.get(url!!.toURI())
+        val input = TestPaths.world()
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(

@@ -237,11 +237,11 @@ object Optimizer {
                     val reserved = setOf("region", "entities", "poi")
                     fs.walk(dim).forEach { p ->
                         if (p == dim) return@forEach
-                        val r = dim.relativize(p).toString()
-                        if (r.isEmpty()) return@forEach
-                        val top = r.substringBefore("/")
+                        val rel = dim.relativize(p)
+                        if (rel.toString().isEmpty()) return@forEach
+                        val top = if (rel.nameCount > 0) rel.getName(0).toString() else ""
                         if (reserved.contains(top)) return@forEach
-                        val target = outDim.resolve(r)
+                        val target = outDim.resolve(rel)
                         if (fs.isDirectory(p)) {
                             fs.createDirectories(target)
                         } else {

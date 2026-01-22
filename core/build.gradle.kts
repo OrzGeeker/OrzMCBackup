@@ -13,7 +13,7 @@ plugins {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("at.yawk.lz4:lz4-java:1.10.2")
+    implementation("org.lz4:lz4-java:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")

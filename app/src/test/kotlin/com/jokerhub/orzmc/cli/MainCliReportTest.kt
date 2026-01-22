@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import picocli.CommandLine
 import java.nio.file.Files
+import com.jokerhub.orzmc.world.Cleaner
 
 class MainCliReportTest {
     @Test
@@ -24,7 +25,7 @@ class MainCliReportTest {
         assertTrue(exit == 0)
         val content = String(Files.readAllBytes(report), Charsets.UTF_8)
         assertTrue(content.contains("\"processedChunks\""))
-        Files.walk(out).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-        Files.deleteIfExists(report)
+        Cleaner.deleteTreeWithRetry(out, 5, 10)
+        Cleaner.deleteTreeWithRetry(report.parent, 5, 10)
     }
 }

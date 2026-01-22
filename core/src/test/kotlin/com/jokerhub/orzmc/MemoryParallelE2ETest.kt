@@ -3,6 +3,8 @@ package com.jokerhub.orzmc
 import com.jokerhub.orzmc.util.CompressionKind
 import com.jokerhub.orzmc.util.McaMemoryBuilder
 import com.jokerhub.orzmc.world.*
+import com.jokerhub.orzmc.util.TestHelper
+import com.jokerhub.orzmc.patterns.InhabitedTimePattern
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -52,9 +54,10 @@ class MemoryParallelE2ETest {
             progressSink = CallbackProgressSink(null)
         )
         val report = Optimizer.run(cfg)
-        val totalEntries = 6L
+        val totalEntries = TestHelper.countEntries(fs, listOf(world, dim1), MemoryMcaIOFactory())
         val ticks = cfg.inhabitedThresholdSeconds * 20
-        val removedExpected = listOf(500L, 3000L, 1000L, 100L, 4000L, 50L).count { it < ticks }.toLong()
+        val pattern = InhabitedTimePattern(ticks, true)
+        val removedExpected = TestHelper.countRemoved(fs, listOf(world, dim1), MemoryMcaIOFactory(), pattern)
         assertEquals(totalEntries, report.processedChunks)
         assertEquals(removedExpected, report.removedChunks)
         val realOut = fs.toRealPath(out.resolve("region"))
