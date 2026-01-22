@@ -5,17 +5,21 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 object TestPaths {
-    private val root: Path = run {
-        val cwd = Paths.get(System.getProperty("user.dir"))
-        val p1 = cwd.resolve("core/src/test/resources/Fixtures")
-        val p2 = cwd.resolve("src/test/resources/Fixtures")
-        when {
-            Files.exists(p1) -> p1
-            Files.exists(p2) -> p2
-            else -> p1
+    private val worldPath: Path = run {
+        val url = Thread.currentThread().contextClassLoader.getResource("Fixtures/world")
+        if (url != null && url.protocol == "file") {
+            Paths.get(url.toURI())
+        } else {
+            val cwd = Paths.get(System.getProperty("user.dir"))
+            val candidate = if (cwd.fileName?.toString() == "core") {
+                cwd.resolve("src/test/resources/Fixtures/world")
+            } else {
+                cwd.resolve("core/src/test/resources/Fixtures/world")
+            }
+            candidate
         }
     }
-    fun world(): Path = root.resolve("world")
+    fun world(): Path = worldPath
     fun worldDataChunks(): Path = world().resolve("data").resolve("chunks.dat")
     fun worldRegion(name: String): Path = world().resolve("region").resolve(name)
 }

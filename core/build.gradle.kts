@@ -43,6 +43,14 @@ tasks.withType<JavaCompile>().configureEach {
     options.release.set(8)
 }
 
+tasks.register<JavaExec>("printTestPaths") {
+    group = "verification"
+    description = "Print TestPaths.world() and existence for CI debugging"
+    mainClass.set("com.jokerhub.orzmc.util.PrintTestPathsKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    isIgnoreExitValue = true
+}
+
 tasks.register<Jar>("javadocJar") {
     dependsOn("dokkaHtml")
     from(layout.buildDirectory.dir("dokka/html"))

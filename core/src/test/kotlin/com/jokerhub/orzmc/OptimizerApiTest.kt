@@ -11,8 +11,14 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import com.jokerhub.orzmc.world.Cleaner
 import com.jokerhub.orzmc.util.TestPaths
+import com.jokerhub.orzmc.world.McaUtils
+import com.jokerhub.orzmc.world.RealFileSystem
 
 class OptimizerApiTest {
+    private fun logInput(input: Path) {
+        val region = input.resolve("region")
+        println("Input: $input exists=${Files.exists(input)} region=$region exists=${Files.exists(region)}")
+    }
     private fun copyDir(src: Path, dst: Path) {
         Files.createDirectories(dst)
         Files.walk(src).forEach { p ->
@@ -29,6 +35,10 @@ class OptimizerApiTest {
     @Test
     fun `run with empty output directory returns report with progress`() {
         val input = TestPaths.world()
+        logInput(input)
+        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
+        println("TOTAL CHUNKS: $total")
+        assertTrue(total > 0)
         val tmpOut = Files.createTempDirectory("optimizer-out-")
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -42,7 +52,11 @@ class OptimizerApiTest {
                 force = true,
                 strict = false,
                 progressInterval = 10,
-                onProgress = { _ -> }
+                onProgress = { e ->
+                    if (e.stage == ProgressStage.Discover) {
+                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                    }
+                }
             )
         )
         assertTrue(report.processedChunks > 0)
@@ -54,6 +68,10 @@ class OptimizerApiTest {
     @Test
     fun `strict mode collects errors for damaged mca`() {
         val fixture = TestPaths.world()
+        logInput(fixture)
+        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(fixture))
+        println("TOTAL CHUNKS: $total")
+        assertTrue(total > 0)
         val tmpWorld = Files.createTempDirectory("optimizer-world-bad-")
         copyDir(fixture, tmpWorld)
         val bad = tmpWorld.resolve("region").resolve("r.bad.mca")
@@ -71,7 +89,11 @@ class OptimizerApiTest {
                 force = false,
                 strict = true,
                 progressInterval = 10,
-                onProgress = { _ -> }
+                onProgress = { e ->
+                    if (e.stage == ProgressStage.Discover) {
+                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                    }
+                }
             )
         )
         assertTrue(report.errors.any { it.kind == "MCA" })
@@ -82,6 +104,10 @@ class OptimizerApiTest {
     @Test
     fun `non-empty output without force returns report with output error`() {
         val input = TestPaths.world()
+        logInput(input)
+        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
+        println("TOTAL CHUNKS: $total")
+        assertTrue(total > 0)
         val tmpOut = Files.createTempDirectory("optimizer-out-nonempty-")
         Files.write(tmpOut.resolve("dummy.txt"), "a".toByteArray(Charsets.UTF_8))
         val report = Optimizer.run(
@@ -105,6 +131,10 @@ class OptimizerApiTest {
     @Test
     fun `progress callback by chunks is emitted`() {
         val input = TestPaths.world()
+        logInput(input)
+        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
+        println("TOTAL CHUNKS: $total")
+        assertTrue(total > 0)
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -118,7 +148,12 @@ class OptimizerApiTest {
                 force = false,
                 strict = false,
                 progressInterval = 100,
-                onProgress = { e -> events.add(e) }
+                onProgress = { e ->
+                    events.add(e)
+                    if (e.stage == ProgressStage.Discover) {
+                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                    }
+                }
             )
         )
         assertTrue(events.any { it.stage == ProgressStage.Done })
@@ -129,6 +164,10 @@ class OptimizerApiTest {
     @Test
     fun `progress callback by time is emitted`() {
         val input = TestPaths.world()
+        logInput(input)
+        val total = McaUtils.countTotalChunks(RealFileSystem, listOf(input))
+        println("TOTAL CHUNKS: $total")
+        assertTrue(total > 0)
         val events = mutableListOf<ProgressEvent>()
         val report = Optimizer.run(
             com.jokerhub.orzmc.world.OptimizerConfig(
@@ -143,7 +182,12 @@ class OptimizerApiTest {
                 strict = false,
                 progressInterval = 100000, // ensure chunk-based won't fire
                 progressIntervalMs = 5,
-                onProgress = { e: ProgressEvent -> events.add(e) }
+                onProgress = { e: ProgressEvent ->
+                    events.add(e)
+                    if (e.stage == ProgressStage.Discover) {
+                        println("DISCOVER: cur=${e.current} tot=${e.total} msg=${e.message}")
+                    }
+                }
             )
         )
         assertTrue(events.any { it.stage == ProgressStage.Done })

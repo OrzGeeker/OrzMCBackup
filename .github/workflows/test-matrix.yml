@@ -56,6 +56,15 @@ jobs:
           distribution: ${{ matrix.java == '8' && 'zulu' || 'temurin' }}
           java-version: ${{ matrix.java }}
           cache: gradle
+      - name: Debug paths on macOS Java 8
+        if: ${{ matrix.java == '8' }}
+        run: |
+          pwd
+          ls -la core/src/test/resources/Fixtures/world || true
+          ls -la src/test/resources/Fixtures/world || true
+          echo "TMPDIR env: ${TMPDIR:-unset}"
+          java -XshowSettings:properties -version 2>&1 | grep -i 'java.io.tmpdir' || true
+          ./gradlew :core:printTestPaths --no-daemon || true
       - uses: gradle/actions/setup-gradle@v3
       - name: Run tests on macOS Java ${{ matrix.java }}
         run: ./gradlew :core:test :app:test --no-daemon
