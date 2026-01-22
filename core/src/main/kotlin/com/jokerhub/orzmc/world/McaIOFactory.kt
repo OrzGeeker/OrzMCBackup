@@ -8,11 +8,13 @@ import java.nio.file.Path
 interface McaReaderLike {
     fun entries(): List<McaEntry>
     fun get(index: Int): McaEntry?
+    fun close()
 }
 
 interface McaWriterLike {
     fun writeEntry(entry: McaEntry)
     fun finalizeFile()
+    fun close()
 }
 
 interface McaIOFactory {
@@ -40,11 +42,24 @@ class RealMcaWriterAdapter(private val delegate: McaWriter) : McaWriterLike {
     override fun finalizeFile() {
         delegate.finalizeFile()
     }
+
+    override fun close() {
+        try {
+            delegate.close()
+        } catch (_: Exception) {
+        }
+    }
 }
 
 class RealMcaReaderAdapter(private val delegate: McaReader) : McaReaderLike {
     override fun entries(): List<McaEntry> = delegate.entries()
     override fun get(index: Int): McaEntry? = delegate.get(index)
+    override fun close() {
+        try {
+            delegate.close()
+        } catch (_: Exception) {
+        }
+    }
 }
 
 class MemoryMcaWriter(private val mem: MemoryFS, private val path: Path) : McaWriterLike {
@@ -85,6 +100,9 @@ class MemoryMcaWriter(private val mem: MemoryFS, private val path: Path) : McaWr
         out.write(time.array())
         out.write(data.toByteArray())
         mem.write(path, out.toByteArray())
+    }
+
+    override fun close() {
     }
 }
 

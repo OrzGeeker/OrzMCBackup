@@ -13,8 +13,7 @@ class McaReaderTest {
         val url = this::class.java.classLoader.getResource("Fixtures/world/region/r.0.0.mca")
         assumeTrue(url != null, "fixtures missing: src/test/resources/Fixtures")
         val p = Paths.get(url!!.toURI())
-        val r = McaReader.open(p.toString())
-        val entries = r.entries()
+        val entries = McaReader.open(p.toString()).use { it.entries() }
         assertTrue(entries.size > 0)
     }
 }

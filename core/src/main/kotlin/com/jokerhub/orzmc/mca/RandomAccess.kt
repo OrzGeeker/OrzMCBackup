@@ -6,6 +6,7 @@ interface RandomAccess {
     fun seek(pos: Long)
     fun readFully(buf: ByteArray)
     fun readFully(buf: ByteArray, off: Int, len: Int)
+    fun close()
 }
 
 class RafAccess(private val raf: RandomAccessFile) : RandomAccess {
@@ -19,6 +20,10 @@ class RafAccess(private val raf: RandomAccessFile) : RandomAccess {
 
     override fun readFully(buf: ByteArray, off: Int, len: Int) {
         raf.readFully(buf, off, len)
+    }
+
+    override fun close() {
+        raf.close()
     }
 }
 
@@ -36,5 +41,8 @@ class MemoryAccess(private val data: ByteArray) : RandomAccess {
     override fun readFully(buf: ByteArray, off: Int, len: Int) {
         System.arraycopy(data, pos, buf, off, len)
         pos += len
+    }
+
+    override fun close() {
     }
 }

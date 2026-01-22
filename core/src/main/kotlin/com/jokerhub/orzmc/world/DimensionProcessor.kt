@@ -41,124 +41,87 @@ object DimensionProcessor {
                 if (!strict) return@regionLoop
             }
             val name = rf.fileName.toString()
-            val cr = try {
-                ioFactory.openReader(fs, rf)
-            } catch (e: Exception) {
+            val efile = entitiesDir.resolve(name)
+            val pfile = poiDir.resolve(name)
+            val cr = try { ioFactory.openReader(fs, rf) } catch (_: Exception) {
                 onError(rf, "MCA", "无法读取 MCA 文件")
                 return@regionLoop
             }
             val cw = ioFactory.createWriter(fs, targetDim.resolve("region").resolve(name))
-            val efile = entitiesDir.resolve(name)
-            val pfile = poiDir.resolve(name)
-            val ew = if (java.nio.file.Files.isRegularFile(fs.toRealPath(efile)) && McaUtils.isValidMca(
-                    fs,
-                    efile
-                )
-            ) ioFactory.createWriter(fs, targetDim.resolve("entities").resolve(name)) else null
-            val pw = if (java.nio.file.Files.isRegularFile(fs.toRealPath(pfile)) && McaUtils.isValidMca(
-                    fs,
-                    pfile
-                )
-            ) ioFactory.createWriter(fs, targetDim.resolve("poi").resolve(name)) else null
-            var removed = 0L
-            val entries = try {
-                cr.entries()
-            } catch (e: Exception) {
-                onError(rf, "Entries", "读取区块条目失败")
-                emptyList()
+            val er: McaReaderLike? = try {
+                if (java.nio.file.Files.isRegularFile(fs.toRealPath(efile)) && McaUtils.isValidMca(fs, efile)) {
+                    ioFactory.openReader(fs, efile)
+                } else null
+            } catch (_: Exception) {
+                onError(efile, "Entities", "读取实体失败")
+                null
             }
-            for (entry in entries) {
-                var keep = false
-                for (p in patterns) {
-                    try {
-                        if (p.matches(entry)) {
-                            keep = true; break
+            val pr: McaReaderLike? = try {
+                if (java.nio.file.Files.isRegularFile(fs.toRealPath(pfile)) && McaUtils.isValidMca(fs, pfile)) {
+                    ioFactory.openReader(fs, pfile)
+                } else null
+            } catch (_: Exception) {
+                onError(pfile, "Poi", "读取 POI 失败")
+                null
+            }
+            val ew = if (er != null) ioFactory.createWriter(fs, targetDim.resolve("entities").resolve(name)) else null
+            val pw = if (pr != null) ioFactory.createWriter(fs, targetDim.resolve("poi").resolve(name)) else null
+            try {
+                val entries = try { cr.entries() } catch (_: Exception) {
+                    onError(rf, "Entries", "读取区块条目失败")
+                    emptyList()
+                }
+                for (entry in entries) {
+                    var keep = false
+                    for (p in patterns) {
+                        try {
+                            if (p.matches(entry)) { keep = true; break }
+                        } catch (_: Exception) {
+                            onError(rf, "Pattern", "匹配模式失败")
                         }
-                    } catch (e: Exception) {
-                        onError(rf, "Pattern", "匹配模式失败")
+                    }
+                    if (keep) {
+                        try { cw.writeEntry(entry) } catch (_: Exception) { onError(rf, "Write", "写入条目失败") }
+                        try {
+                            val eentry = er?.get(entry.regionIndex())
+                            if (eentry != null && ew != null) {
+                                try { ew.writeEntry(eentry) } catch (_: Exception) { onError(efile, "WriteEntities", "写入实体条目失败") }
+                            }
+                        } catch (_: Exception) {
+                            onError(efile, "Entities", "读取实体失败")
+                        }
+                        try {
+                            val pentry = pr?.get(entry.regionIndex())
+                            if (pentry != null && pw != null) {
+                                try { pw.writeEntry(pentry) } catch (_: Exception) { onError(pfile, "WritePoi", "写入 POI 条目失败") }
+                            }
+                        } catch (_: Exception) {
+                            onError(pfile, "Poi", "读取 POI 失败")
+                        }
+                    } else {
+                        removedTotal += 1
+                    }
+                    val processed = processedCounter.incrementAndGet()
+                    if (useTime) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastEmit >= progressIntervalMs) {
+                            onProgress?.invoke(ProgressEvent(ProgressStage.ChunkProgress, processed, totalChunks, rf.toString(), null))
+                            lastEmit = now
+                        }
+                    } else if (progressInterval > 0 && processed % progressInterval == 0L) {
+                        onProgress?.invoke(ProgressEvent(ProgressStage.ChunkProgress, processed, totalChunks, rf.toString(), null))
                     }
                 }
-                if (keep) {
-                    try {
-                        cw.writeEntry(entry)
-                    } catch (e: Exception) {
-                        onError(rf, "Write", "写入条目失败")
-                    }
-                    try {
-                        val er = if (java.nio.file.Files.isRegularFile(fs.toRealPath(efile)) && McaUtils.isValidMca(
-                                fs,
-                                efile
-                            )
-                        ) ioFactory.openReader(fs, efile) else null
-                        val eentry = er?.get(entry.regionIndex())
-                        if (eentry != null && ew != null) try {
-                            ew.writeEntry(eentry)
-                        } catch (e: Exception) {
-                            onError(efile, "WriteEntities", "写入实体条目失败")
-                        }
-                    } catch (e: Exception) {
-                        onError(efile, "Entities", "读取实体失败")
-                    }
-                    try {
-                        val pr = if (java.nio.file.Files.isRegularFile(fs.toRealPath(pfile)) && McaUtils.isValidMca(
-                                fs,
-                                pfile
-                            )
-                        ) ioFactory.openReader(fs, pfile) else null
-                        val pentry = pr?.get(entry.regionIndex())
-                        if (pentry != null && pw != null) try {
-                            pw.writeEntry(pentry)
-                        } catch (e: Exception) {
-                            onError(pfile, "WritePoi", "写入 POI 条目失败")
-                        }
-                    } catch (e: Exception) {
-                        onError(pfile, "Poi", "读取 POI 失败")
-                    }
-                } else {
-                    removed += 1
-                    removedTotal += 1
-                }
-                val processed = processedCounter.incrementAndGet()
-                if (useTime) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastEmit >= progressIntervalMs) {
-                        onProgress?.invoke(
-                            ProgressEvent(
-                                ProgressStage.ChunkProgress,
-                                processed,
-                                totalChunks,
-                                rf.toString(),
-                                null
-                            )
-                        )
-                        lastEmit = now
-                    }
-                } else if (progressInterval > 0 && processed % progressInterval == 0L) {
-                    onProgress?.invoke(
-                        ProgressEvent(
-                            ProgressStage.ChunkProgress,
-                            processed,
-                            totalChunks,
-                            rf.toString(),
-                            null
-                        )
-                    )
-                }
-            }
-            try {
-                cw.finalizeFile()
-            } catch (e: Exception) {
-                onError(rf, "Finalize", "完成写入失败")
-            }
-            try {
-                ew?.finalizeFile()
-            } catch (e: Exception) {
-                onError(efile, "FinalizeEntities", "完成实体写入失败")
-            }
-            try {
-                pw?.finalizeFile()
-            } catch (e: Exception) {
-                onError(pfile, "FinalizePoi", "完成 POI 写入失败")
+                try { cw.finalizeFile() } catch (_: Exception) { onError(rf, "Finalize", "完成写入失败") }
+                try { ew?.finalizeFile() } catch (_: Exception) { onError(efile, "FinalizeEntities", "完成实体写入失败") }
+                try { pw?.finalizeFile() } catch (_: Exception) { onError(pfile, "FinalizePoi", "完成 POI 写入失败") }
+            } finally {
+                try { cr.close() } catch (_: Exception) {}
+                try { cw.close() } catch (_: Exception) {}
+                try { er?.close() } catch (_: Exception) {}
+                try { pr?.close() } catch (_: Exception) {}
+                try { ew?.close() } catch (_: Exception) {}
+                try { pw?.close() } catch (_: Exception) {}
             }
         }
         onProgress?.invoke(ProgressEvent(ProgressStage.DimensionEnd, null, null, inputDim.toString(), null))

@@ -51,4 +51,8 @@ class McaWriter(path: String) {
         file.write(time)
         file.fd.sync()
     }
+
+    fun close() {
+        file.close()
+    }
 }

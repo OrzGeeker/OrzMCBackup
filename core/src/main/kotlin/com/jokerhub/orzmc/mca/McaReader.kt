@@ -6,7 +6,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.regex.Pattern
 
-class McaReader(private val file: RandomAccess, private val path: String, val xPos: Int, val zPos: Int) {
+class McaReader(private val file: RandomAccess, private val path: String, val xPos: Int, val zPos: Int) : AutoCloseable {
     private var offsets: IntArray? = null
     private var sizes: IntArray? = null
     private var timestamps: IntArray? = null
@@ -94,5 +94,12 @@ class McaReader(private val file: RandomAccess, private val path: String, val xP
         val ts = timestamps!![index]
         if (off == 0 || size == 0) return null
         return McaEntry(file, off.toLong(), size, index, ts, xPos, zPos)
+    }
+
+    override fun close() {
+        try {
+            file.close()
+        } catch (_: Exception) {
+        }
     }
 }

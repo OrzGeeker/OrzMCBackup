@@ -35,13 +35,15 @@ class OptimizerApiTest {
     }
     private fun copyDir(src: Path, dst: Path) {
         Files.createDirectories(dst)
-        Files.walk(src).forEach { p ->
-            val rel = src.relativize(p)
-            val target = dst.resolve(rel.toString())
-            if (Files.isDirectory(p)) {
-                Files.createDirectories(target)
-            } else {
-                Files.copy(p, target)
+        Files.walk(src).use { s ->
+            s.forEach { p ->
+                val rel = src.relativize(p)
+                val target = dst.resolve(rel.toString())
+                if (Files.isDirectory(p)) {
+                    Files.createDirectories(target)
+                } else {
+                    Files.copy(p, target)
+                }
             }
         }
     }

@@ -14,8 +14,7 @@ class ForceLoadedListTest {
     fun `forced coords should match some entries`() {
         val forced = NbtForceLoader.parse(TestPaths.worldDataChunks().toFile())
         val pattern = ListPattern(forced.map { it.first to it.second })
-        val r = McaReader.open(TestPaths.worldRegion("r.0.0.mca").toString())
-        val entries = r.entries()
+        val entries = McaReader.open(TestPaths.worldRegion("r.0.0.mca").toString()).use { it.entries() }
         val anyMatch = entries.any { pattern.matches(it) }
         assertTrue(anyMatch, "expected at least one entry to be forced-loaded")
     }

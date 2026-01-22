@@ -12,7 +12,11 @@ object TestHelper {
             val regionDir = dim.resolve("region")
             fs.list(regionDir).filter { it.toString().endsWith(".mca") }.forEach { p ->
                 val r = ioFactory.openReader(fs, p)
-                removed += r.entries().count { e -> !pattern.matches(e) }
+                try {
+                    removed += r.entries().count { e -> !pattern.matches(e) }
+                } finally {
+                    try { r.close() } catch (_: Exception) {}
+                }
             }
         }
         return removed
@@ -24,7 +28,11 @@ object TestHelper {
             val regionDir = dim.resolve("region")
             fs.list(regionDir).filter { it.toString().endsWith(".mca") }.forEach { p ->
                 val r = ioFactory.openReader(fs, p)
-                total += r.entries().size
+                try {
+                    total += r.entries().size
+                } finally {
+                    try { r.close() } catch (_: Exception) {}
+                }
             }
         }
         return total

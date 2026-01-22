@@ -20,8 +20,9 @@ object McaUtils {
             if (!fs.isDirectory(regionDir)) continue
             fs.list(regionDir).filter { it.toString().endsWith(".mca") && isValidMca(fs, it) }.forEach { p ->
                 try {
-                    val r = McaReader.open(fs.toRealPath(p).toString())
-                    total += r.entries().size
+                    McaReader.open(fs.toRealPath(p).toString()).use { r ->
+                        total += r.entries().size
+                    }
                 } catch (_: Exception) {
                 }
             }
