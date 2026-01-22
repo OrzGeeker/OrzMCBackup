@@ -106,6 +106,23 @@ object Optimizer {
         val totalChunks = McaUtils.countTotalChunks(fs, tasks)
         val processedChunksAtomic = java.util.concurrent.atomic.AtomicLong(0L)
         var removedTotal = 0L
+        val miscTotal = if (!inPlace && config.copyMisc) {
+            var c = 0L
+            val reserved = setOf("region", "entities", "poi")
+            tasks.forEach { dim ->
+                fs.walk(dim).forEach { p ->
+                    if (p == dim) return@forEach
+                    val rel = dim.relativize(p)
+                    if (rel.toString().isEmpty()) return@forEach
+                    val top = if (rel.nameCount > 0) rel.getName(0).toString() else ""
+                    if (reserved.contains(top)) return@forEach
+                    c += 1
+                }
+            }
+            c
+        } else 0L
+        val zipSteps = if (!inPlace && zipOutput) 2L else 0L
+        val progressTotal = totalChunks + miscTotal + zipSteps
         emit(ProgressStage.Discover, 0, totalChunks, input, "统计区块")
 
         val onProgressCb: (ProgressEvent) -> Unit = { e -> progressSink.emit(e) }
@@ -132,7 +149,7 @@ object Optimizer {
                     patterns,
                     { p, k, m -> record(p, k, m) },
                     onProgressCb,
-                    totalChunks,
+                    progressTotal,
                     progressInterval,
                     progressIntervalMs,
                     processedChunksAtomic,
@@ -167,7 +184,7 @@ object Optimizer {
                         patterns,
                         { p, k, m -> record(p, k, m) },
                         onProgressCb,
-                        totalChunks,
+                        progressTotal,
                         progressInterval,
                         progressIntervalMs,
                         processedChunksAtomic,
@@ -230,6 +247,22 @@ object Optimizer {
             }
         } else {
             if (config.copyMisc) {
+                val base = processedChunksAtomic.get()
+                emit(ProgressStage.CopyMisc, base, progressTotal, out, "复制杂项文件")
+                var done = 0L
+                val useTime = progressIntervalMs > 0
+                var lastEmit = System.currentTimeMillis()
+                fun maybeEmit(p: Path?) {
+                    if (useTime) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastEmit >= progressIntervalMs) {
+                            emit(ProgressStage.CopyMiscProgress, base + done, progressTotal, p, null)
+                            lastEmit = now
+                        }
+                    } else if (progressInterval > 0 && done % progressInterval == 0L) {
+                        emit(ProgressStage.CopyMiscProgress, base + done, progressTotal, p, null)
+                    }
+                }
                 tasks.forEach { dim ->
                     val rel = input.relativize(dim)
                     val outDim = out.resolve(rel)
@@ -244,6 +277,8 @@ object Optimizer {
                         val target = outDim.resolve(rel)
                         if (fs.isDirectory(p)) {
                             fs.createDirectories(target)
+                            done += 1
+                            maybeEmit(target)
                         } else {
                             try {
                                 fs.createDirectories(target.parent ?: outDim)
@@ -251,29 +286,37 @@ object Optimizer {
                             try {
                                 fs.copy(p, target, true)
                             } catch (_: Exception) {}
+                            done += 1
+                            maybeEmit(target)
                         }
                     }
                 }
+                emit(ProgressStage.CopyMiscProgress, base + done, progressTotal, out, null)
             }
             if (zipOutput) {
+                val base = processedChunksAtomic.get()
+                val afterMisc = base + miscTotal
                 try {
-                    emit(ProgressStage.Compress, null, null, out, null)
+                    emit(ProgressStage.Compress, afterMisc, progressTotal, out, null)
                     Compressor.compressToTimestampZip(out)
+                    emit(ProgressStage.Compress, afterMisc + 1, progressTotal, out, null)
                 } catch (e: IOException) {
                     val msg = "压缩输出目录失败：${out}"
                     record(out, "Compress", msg)
                 }
                 try {
-                    emit(ProgressStage.Cleanup, null, null, out, null)
+                    emit(ProgressStage.Cleanup, afterMisc + 1, progressTotal, out, null)
                     val ok = fs.deleteTreeWithRetry(out, 5, 500)
                     if (!ok) throw IOException("cleanup failed")
+                    emit(ProgressStage.Cleanup, afterMisc + 2, progressTotal, out, null)
                 } catch (e: IOException) {
                     val msg = "删除输出目录失败：${out}"
                     record(out, "Cleanup", msg)
                 }
             }
         }
-        emit(ProgressStage.Done, processedChunksAtomic.get(), totalChunks, input, null)
+        val doneCur = processedChunksAtomic.get() + miscTotal + zipSteps
+        emit(ProgressStage.Done, doneCur, progressTotal, input, null)
         val report = OptimizeReport(processedChunksAtomic.get(), removedTotal, errors)
         config.reportSink?.write(report)
         metrics.incProcessed(report.processedChunks)

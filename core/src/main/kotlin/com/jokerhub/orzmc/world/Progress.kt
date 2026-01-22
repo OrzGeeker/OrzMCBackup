@@ -8,6 +8,8 @@ enum class ProgressStage {
     ChunkProgress,
     DimensionEnd,
     Finalize,
+    CopyMisc,
+    CopyMiscProgress,
     Compress,
     Cleanup,
     Done

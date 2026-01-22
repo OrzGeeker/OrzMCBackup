@@ -127,8 +127,33 @@ class Main : Callable<Int> {
                             }
                         }
                         ProgressStage.Finalize -> println("完成写入：${e.path}")
-                        ProgressStage.Compress -> println("压缩输出目录")
-                        ProgressStage.Cleanup -> println("清理输出目录")
+                        ProgressStage.CopyMisc -> println("复制杂项文件")
+                        ProgressStage.CopyMiscProgress -> {
+                            val cur = e.current ?: 0
+                            val tot = e.total ?: 0
+                            if (progressMode == ProgressMode.Global) {
+                                val percent = if (tot > 0) (cur * 100) / tot else 0
+                                println("进度：$percent%（$cur/$tot）")
+                            }
+                        }
+                        ProgressStage.Compress -> {
+                            println("压缩输出目录")
+                            val cur = e.current ?: 0
+                            val tot = e.total ?: 0
+                            if (progressMode == ProgressMode.Global) {
+                                val percent = if (tot > 0) (cur * 100) / tot else 0
+                                println("进度：$percent%（$cur/$tot）")
+                            }
+                        }
+                        ProgressStage.Cleanup -> {
+                            println("清理输出目录")
+                            val cur = e.current ?: 0
+                            val tot = e.total ?: 0
+                            if (progressMode == ProgressMode.Global) {
+                                val percent = if (tot > 0) (cur * 100) / tot else 0
+                                println("进度：$percent%（$cur/$tot）")
+                            }
+                        }
                         ProgressStage.DimensionEnd -> println("维度完成：${e.path}")
                         ProgressStage.Done -> {
                             val cur = e.current ?: 0
