@@ -70,6 +70,38 @@ object DefaultOptimizer : OptimizerEngine {
         return tasks
     }
 
+    /**
+     * Finds ancestor directories of discovered dimensions that are NOT themselves
+     * dimension directories but contain [level.dat], [players/], [data/], etc. at
+     * their root level — a layout introduced by Paper 26.1+ (e.g.,
+     * `world/` → `world/dimensions/minecraft/overworld/`).
+     *
+     * Misc files from these ancestors (e.g., `world/level.dat`, `world/players/`)
+     * are excluded from per-dimension misc copying since the ancestors are not
+     * discovered as dimensions. They must be copied separately.
+     */
+    private fun discoverMiscParents(
+        fs: FileSystem,
+        input: Path,
+        dimensions: List<Path>,
+    ): List<Path> {
+        val parents = mutableSetOf<Path>()
+        dimensions.forEach { dim ->
+            // Only traverse up for nested dimensions (Paper 26.1+ structure).
+            // When dim == input (flat single-world layout), there are no
+            // ancestor misc files to copy — they ARE the dimension's own misc.
+            if (dim == input) return@forEach
+            var parent = dim.parent
+            while (parent != null && parent != input) {
+                if (!isDimensionDir(fs, parent)) {
+                    parents.add(parent)
+                }
+                parent = parent.parent
+            }
+        }
+        return parents.toList()
+    }
+
     override fun run(request: OptimizerRequest): OptimizeReport {
         val input = request.input
         val fs = request.io.fs
@@ -109,9 +141,12 @@ object DefaultOptimizer : OptimizerEngine {
         val ticks = request.filter.inhabitedThresholdSeconds * 20
         emit(ProgressStage.Discover, null, null, input, "scanning dimensions")
         val tasks = discoverDimensions(fs, input)
+        val dimSet = tasks.toSet()
+        val miscParents = discoverMiscParents(fs, input, tasks)
         val totalChunks = McaUtils.countTotalChunks(fs, request.io.ioFactory, tasks) { p, k, m -> record(p, k, m) }
 
-        val miscTotal = countMiscFiles(fs, tasks, request)
+        val miscSources = tasks + miscParents
+        val miscTotal = countMiscFiles(fs, miscSources, request, dimSet)
         val zipSteps = if (!request.outputOptions.inPlace && request.outputOptions.zipOutput) 2L else 0L
         val progressTotal = totalChunks + miscTotal + zipSteps
         emit(ProgressStage.Discover, 0, totalChunks, input, "counting chunks")
@@ -146,7 +181,7 @@ object DefaultOptimizer : OptimizerEngine {
                 handleInPlaceReplacement(fs, tasks, input, out)
             } else {
                 if (request.outputOptions.copyMisc) {
-                    copyMiscFiles(ctx, tasks, miscTotal, request)
+                    copyMiscFiles(ctx, miscSources, miscTotal, request, dimSet)
                 }
                 if (request.outputOptions.zipOutput) {
                     handleZipOutput(ctx, miscTotal)
@@ -208,16 +243,18 @@ object DefaultOptimizer : OptimizerEngine {
     @Suppress("LoopWithTooManyJumpStatements")
     private fun countMiscFiles(
         fs: FileSystem,
-        tasks: List<Path>,
+        sources: List<Path>,
         request: OptimizerRequest,
+        excludePaths: Set<Path> = emptySet(),
     ): Long {
         if (request.outputOptions.inPlace || !request.outputOptions.copyMisc) return 0L
         var c = 0L
         val reserved = setOf("region", "entities", "poi")
-        tasks.forEach { dim ->
-            for (p in fs.walk(dim)) {
-                if (p == dim) continue
-                val rel = dim.relativize(p)
+        sources.forEach { dir ->
+            for (p in fs.walk(dir)) {
+                if (p == dir) continue
+                if (excludePaths.any { it != dir && p.startsWith(it) }) continue
+                val rel = dir.relativize(p)
                 if (rel.toString().isEmpty()) continue
                 val top = if (rel.nameCount > 0) rel.getName(0).toString() else ""
                 if (reserved.contains(top)) continue
@@ -360,9 +397,10 @@ object DefaultOptimizer : OptimizerEngine {
     @Suppress("LoopWithTooManyJumpStatements")
     private fun copyMiscFiles(
         ctx: DimensionContext,
-        tasks: List<Path>,
+        sources: List<Path>,
         miscTotal: Long,
         request: OptimizerRequest,
+        excludePaths: Set<Path> = emptySet(),
     ) {
         val base = ctx.processedChunksAtomic.get()
         ctx.emit(ProgressStage.CopyMisc, base, ctx.progressTotal, ctx.out, "copying misc files")
@@ -383,25 +421,26 @@ object DefaultOptimizer : OptimizerEngine {
                 ctx.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progressTotal, p, null)
             }
         }
-        tasks.forEach { dim ->
-            val rel = ctx.input.relativize(dim)
-            val outDim = ctx.out.resolve(rel)
-            ctx.fs.createDirectories(outDim)
+        sources.forEach { dir ->
+            val rel = ctx.input.relativize(dir)
+            val outDir = ctx.out.resolve(rel)
+            ctx.fs.createDirectories(outDir)
             val reserved = setOf("region", "entities", "poi")
-            for (p in ctx.fs.walk(dim)) {
-                if (p == dim) continue
-                val relPath = dim.relativize(p)
+            for (p in ctx.fs.walk(dir)) {
+                if (p == dir) continue
+                if (excludePaths.any { it != dir && p.startsWith(it) }) continue
+                val relPath = dir.relativize(p)
                 if (relPath.toString().isEmpty()) continue
                 val top = if (relPath.nameCount > 0) relPath.getName(0).toString() else ""
                 if (reserved.contains(top)) continue
-                val target = outDim.resolve(relPath)
+                val target = outDir.resolve(relPath)
                 if (ctx.fs.isDirectory(p)) {
                     ctx.fs.createDirectories(target)
                     done += 1
                     maybeEmit(target)
                 } else {
                     try {
-                        ctx.fs.createDirectories(target.parent ?: outDim)
+                        ctx.fs.createDirectories(target.parent ?: outDir)
                     } catch (e: Exception) {
                         ctx.record(p, "CopyMisc", "创建目录失败: ${e.message}")
                     }
