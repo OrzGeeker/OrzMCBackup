@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.5 (2026-07-02)
 
 ### Changed
 - CI lint/coverage 升级至 JDK 25，本地与 CI 保持一致
