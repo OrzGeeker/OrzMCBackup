@@ -696,4 +696,264 @@ class Paper26StructureTest {
             "dimension-level data should be copied",
         )
     }
+
+    /**
+     * Deeply nested layout: multiple intermediate non-dimension directories
+     * exist between the input root and the actual dimension directories.
+     * Each ancestor that is not itself a dimension and not equal to input
+     * must be discovered as a misc parent so its files are copied.
+     *
+     * Structure:
+     * ```
+     * input/
+     * └── container/
+     *     ├── config.yml          (container-level misc)
+     *     └── saves/
+     *         └── my_world/
+     *             ├── level.dat   (world-level misc)
+     *             ├── players/
+     *             │   └── p.dat
+     *             └── dimensions/
+     *                 └── minecraft/
+     *                     ├── overworld/region/r.0.0.mca
+     *                     └── the_nether/region/r.-1.-1.mca
+     * ```
+     */
+    @Test
+    fun `deeply nested intermediate directories preserve misc files at all levels`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/deep-nest")
+        fs.createDirectories(input)
+
+        // Container level
+        val container = input.resolve("container")
+        fs.createDirectories(container)
+        fs.write(container.resolve("config.yml"), "config".toByteArray(Charsets.UTF_8))
+
+        // Saves level (empty misc parent — only contains my_world/)
+        val saves = container.resolve("saves")
+        fs.createDirectories(saves)
+
+        // World level
+        val myWorld = saves.resolve("my_world")
+        fs.createDirectories(myWorld)
+        fs.write(myWorld.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(myWorld.resolve("players"))
+        fs.write(myWorld.resolve("players").resolve("p.dat"), "player".toByteArray(Charsets.UTF_8))
+
+        // Nested dimensions
+        val overworld = myWorld.resolve("dimensions/minecraft/overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val nether = myWorld.resolve("dimensions/minecraft/the_nether")
+        fs.createDirectories(nether)
+        fs.createDirectories(nether.resolve("region"))
+        fs.write(
+            nether.resolve("region").resolve("r.-1.-1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val output = Paths.get("/mem/deep-nest-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks from all dimensions")
+        assertTrue(report.errors.isEmpty(), "no errors expected, got: ${report.errors}")
+
+        // Container-level misc files preserved
+        assertTrue(
+            fs.exists(output.resolve("container/config.yml")),
+            "container-level config.yml should be copied",
+        )
+
+        // World-level misc files preserved
+        assertTrue(
+            fs.exists(output.resolve("container/saves/my_world/level.dat")),
+            "world-level level.dat should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("container/saves/my_world/players/p.dat")),
+            "world-level players should be copied",
+        )
+
+        // All dimensions processed
+        assertTrue(
+            fs.exists(
+                output.resolve(
+                    "container/saves/my_world/dimensions/minecraft/overworld/region/r.0.0.mca",
+                ),
+            ),
+            "overworld region should be copied",
+        )
+        assertTrue(
+            fs.exists(
+                output.resolve(
+                    "container/saves/my_world/dimensions/minecraft/the_nether/region/r.-1.-1.mca",
+                ),
+            ),
+            "nether region should be copied",
+        )
+
+        // No misc files in dimension directories
+        assertFalse(
+            fs.exists(
+                output.resolve(
+                    "container/saves/my_world/dimensions/minecraft/overworld/config.yml",
+                ),
+            ),
+            "container misc should not leak into overworld dimension",
+        )
+    }
+
+    /**
+     * When the world directory is passed as direct input with copyMisc=false,
+     * dimension MCA files must still be processed correctly. Only misc files
+     * (level.dat, players/, etc.) should be skipped — not the region data.
+     */
+    @Test
+    fun `world directory as direct input with copyMisc false still processes dimensions`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/world-nomisc")
+        fs.createDirectories(input)
+
+        // World-level misc files (should be skipped)
+        fs.write(input.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("players"))
+        fs.write(input.resolve("players").resolve("p.dat"), "player".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("data"))
+        fs.write(input.resolve("data").resolve("scores.dat"), "scores".toByteArray(Charsets.UTF_8))
+
+        // Nested dimensions
+        val overworld = input.resolve("dimensions/minecraft/overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(overworld.resolve("entities"))
+        fs.write(
+            overworld.resolve("entities").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val nether = input.resolve("dimensions/minecraft/the_nether")
+        fs.createDirectories(nether)
+        fs.createDirectories(nether.resolve("region"))
+        fs.write(
+            nether.resolve("region").resolve("r.-1.-1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val output = Paths.get("/mem/world-nomisc-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true, copyMisc = false),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks from dimensions")
+        assertTrue(report.errors.isEmpty(), "no errors expected, got: ${report.errors}")
+
+        // Dimension MCA files must still be processed
+        assertTrue(
+            fs.exists(output.resolve("dimensions/minecraft/overworld/region/r.0.0.mca")),
+            "region should be copied even when copyMisc=false",
+        )
+        assertTrue(
+            fs.exists(output.resolve("dimensions/minecraft/overworld/entities/r.0.0.mca")),
+            "entities should be copied even when copyMisc=false",
+        )
+        assertTrue(
+            fs.exists(output.resolve("dimensions/minecraft/the_nether/region/r.-1.-1.mca")),
+            "nether region should be copied even when copyMisc=false",
+        )
+
+        // World-level misc files must NOT be copied
+        assertFalse(
+            fs.exists(output.resolve("level.dat")),
+            "level.dat should NOT be copied when copyMisc=false",
+        )
+        assertFalse(
+            fs.exists(output.resolve("players/p.dat")),
+            "players should NOT be copied when copyMisc=false",
+        )
+        assertFalse(
+            fs.exists(output.resolve("data/scores.dat")),
+            "data/scores.dat should NOT be copied when copyMisc=false",
+        )
+    }
+
+    /**
+     * When the input directory contains [dimensions/] but no actual dimension
+     * directories (no [region/] subdirectories anywhere), [discoverDimensions]
+     * returns empty. [discoverMiscParents] should still return input (via the
+     * post-loop check) so that misc files are preserved even though there are
+     * no chunks to process.
+     *
+     * This guards against a regression where the post-loop check succeeds but
+     * an empty dimensions list causes the misc sources to be empty.
+     */
+    @Test
+    fun `world as direct input with empty dimensions directory preserves misc files`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/empty-dims-world")
+        fs.createDirectories(input)
+
+        // World-level misc files
+        fs.write(input.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("players"))
+        fs.write(input.resolve("players").resolve("p.dat"), "player".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("data"))
+        fs.write(input.resolve("data").resolve("info.dat"), "info".toByteArray(Charsets.UTF_8))
+
+        // dimensions/ directory exists but is empty (no subdirs with region/)
+        fs.createDirectories(input.resolve("dimensions"))
+        fs.createDirectories(input.resolve("dimensions").resolve("minecraft"))
+
+        val output = Paths.get("/mem/empty-dims-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        // No chunks to process — dimensions list is empty
+        assertTrue(report.processedChunks == 0L, "no chunks expected, got: ${report.processedChunks}")
+        assertTrue(report.errors.isEmpty(), "no errors expected, got: ${report.errors}")
+
+        // World-level misc files should still be preserved even with no dimensions
+        assertTrue(
+            fs.exists(output.resolve("level.dat")),
+            "level.dat should be copied even with no dimensions",
+        )
+        assertTrue(
+            fs.exists(output.resolve("players/p.dat")),
+            "players should be copied even with no dimensions",
+        )
+        assertTrue(
+            fs.exists(output.resolve("data/info.dat")),
+            "data/info.dat should be copied even with no dimensions",
+        )
+
+        // The empty dimensions/ structure itself may or may not be copied
+        // (it's an implementation detail — empty dirs are harmless either way)
+    }
 }

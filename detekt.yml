@@ -43,6 +43,10 @@ empty-blocks:
     active: false
 
 complexity:
+  # Paper26StructureTest 有 750+ 行，15 个测试方法覆盖多种世界目录结构
+  LargeClass:
+    active: true
+    allowedLines: 900
   # 核心引擎和 CLI 入口方法较长（call() ~200行, processSingleRegion ~170行）
   LongMethod:
     active: true
