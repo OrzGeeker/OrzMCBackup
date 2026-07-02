@@ -14,7 +14,9 @@ class MemoryParallelE2ETest {
     @Test
     fun `parallel optimize across dimensions and regions`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         val dim1 = world.resolve("DIM1")
@@ -44,7 +46,9 @@ class MemoryParallelE2ETest {
                 ),
             )
         fs.write(dim1.resolve("region").resolve("r.0.0.mca"), d1r00)
-        val out = java.nio.file.Paths.get("/mem/out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/out")
         val request =
             OptimizerRequest(
                 input = world,

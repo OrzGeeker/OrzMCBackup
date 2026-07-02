@@ -69,7 +69,12 @@ class McaEntry(
         if (method == CompressionMethod.CUSTOM) {
             val nameLenBuf = ByteArray(2)
             file.readFully(nameLenBuf)
-            val n = ByteBuffer.wrap(nameLenBuf).order(ByteOrder.BIG_ENDIAN).short.toInt() and 0xFFFF
+            val n =
+                ByteBuffer
+                    .wrap(nameLenBuf)
+                    .order(ByteOrder.BIG_ENDIAN)
+                    .short
+                    .toInt() and 0xFFFF
             val nameBytes = ByteArray(n)
             file.readFully(nameBytes)
             custom = String(nameBytes)
@@ -92,7 +97,12 @@ class McaEntry(
         if (method == CompressionMethod.CUSTOM) {
             val nameLenBuf = ByteArray(2)
             file.readFully(nameLenBuf)
-            val n = ByteBuffer.wrap(nameLenBuf).order(ByteOrder.BIG_ENDIAN).short.toInt() and 0xFFFF
+            val n =
+                ByteBuffer
+                    .wrap(nameLenBuf)
+                    .order(ByteOrder.BIG_ENDIAN)
+                    .short
+                    .toInt() and 0xFFFF
             val nameBytes = ByteArray(n)
             file.readFully(nameBytes)
             pos += 2 + n
@@ -142,9 +152,13 @@ class McaEntry(
         private fun decodeLZ4Blocks(inp: ByteArray): ByteArray {
             var i = 0
             val out = java.io.ByteArrayOutputStream()
-            val lz4 = net.jpountz.lz4.LZ4Factory.safeInstance().safeDecompressor()
+            val lz4 =
+                net.jpountz.lz4.LZ4Factory
+                    .safeInstance()
+                    .safeDecompressor()
             while (i + LZ4_HEADER_LEN <= inp.size) {
-                if (!inp.copyOfRange(i, i + 8)
+                if (!inp
+                        .copyOfRange(i, i + 8)
                         .contentEquals(LZ4_MAGIC)
                 ) {
                     throw IllegalArgumentException("invalid LZ4 magic")

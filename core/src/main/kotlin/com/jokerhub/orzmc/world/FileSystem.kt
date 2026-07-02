@@ -82,7 +82,10 @@ object RealFileSystem : FileSystem {
     override fun list(path: Path): List<Path> {
         val s = Files.list(path)
         return try {
-            s.collect(java.util.stream.Collectors.toList())
+            s.collect(
+                java.util.stream.Collectors
+                    .toList(),
+            )
         } finally {
             try {
                 s.close()
@@ -94,7 +97,10 @@ object RealFileSystem : FileSystem {
     override fun walk(path: Path): List<Path> {
         val s = Files.walk(path)
         return try {
-            s.collect(java.util.stream.Collectors.toList())
+            s.collect(
+                java.util.stream.Collectors
+                    .toList(),
+            )
         } finally {
             try {
                 s.close()
@@ -185,7 +191,9 @@ class MemoryFS : FileSystem {
     override fun isRegularFile(path: Path): Boolean = nodes[path] == NodeType.FILE
 
     override fun createTempDirectory(prefix: String): Path {
-        val p = java.nio.file.Paths.get("/mem-$prefix-${System.currentTimeMillis()}")
+        val p =
+            java.nio.file.Paths
+                .get("/mem-$prefix-${System.currentTimeMillis()}")
         nodes[p] = NodeType.DIRECTORY
         return p
     }

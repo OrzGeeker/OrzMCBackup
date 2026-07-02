@@ -12,7 +12,11 @@ import java.util.zip.GZIPOutputStream
 enum class CompressionKind { RAW, ZLIB, GZIP, LZ4 }
 
 object McaMemoryBuilder {
-    data class MemChunk(val index: Int, val inhabited: Long, val kind: CompressionKind)
+    data class MemChunk(
+        val index: Int,
+        val inhabited: Long,
+        val kind: CompressionKind,
+    )
 
     private fun inhabitedTag(value: Long): ByteArray {
         val name = "InhabitedTime".toByteArray()
@@ -31,8 +35,8 @@ object McaMemoryBuilder {
     private fun compress(
         kind: CompressionKind,
         data: ByteArray,
-    ): Pair<Int, ByteArray> {
-        return when (kind) {
+    ): Pair<Int, ByteArray> =
+        when (kind) {
             CompressionKind.RAW -> 3 to data
             CompressionKind.ZLIB -> {
                 val bos = ByteArrayOutputStream()
@@ -69,7 +73,6 @@ object McaMemoryBuilder {
                 4 to out.toByteArray()
             }
         }
-    }
 
     fun buildSingleEntryMca(
         index: Int,
@@ -90,7 +93,12 @@ object McaMemoryBuilder {
             m: Int,
             b: ByteArray,
         ) {
-            val lenBuf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(1 + b.size).array()
+            val lenBuf =
+                ByteBuffer
+                    .allocate(4)
+                    .order(ByteOrder.BIG_ENDIAN)
+                    .putInt(1 + b.size)
+                    .array()
             bos.write(lenBuf)
             bos.write(byteArrayOf(m.toByte()))
             bos.write(b)
@@ -135,7 +143,12 @@ object McaMemoryBuilder {
         val data = ByteArrayOutputStream()
         var offsetBytes = 8192
 
-        val lenBuf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(1 + body.size).array()
+        val lenBuf =
+            ByteBuffer
+                .allocate(4)
+                .order(ByteOrder.BIG_ENDIAN)
+                .putInt(1 + body.size)
+                .array()
         data.write(lenBuf)
         data.write(byteArrayOf(method.toByte()))
         data.write(body)
@@ -170,7 +183,12 @@ object McaMemoryBuilder {
         for (c in chunks) {
             val payload = inhabitedTag(c.inhabited)
             val (method, body) = compress(c.kind, payload)
-            val lenBuf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(1 + body.size).array()
+            val lenBuf =
+                ByteBuffer
+                    .allocate(4)
+                    .order(ByteOrder.BIG_ENDIAN)
+                    .putInt(1 + body.size)
+                    .array()
             data.write(lenBuf)
             data.write(byteArrayOf(method.toByte()))
             data.write(body)

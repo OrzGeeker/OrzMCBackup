@@ -53,14 +53,24 @@ object ReportIO {
 
     fun toJson(r: OptimizeReport): String {
         val sb = StringBuilder()
-        sb.append("{\"processedChunks\":").append(r.processedChunks)
-            .append(",\"removedChunks\":").append(r.removedChunks)
+        sb
+            .append("{\"processedChunks\":")
+            .append(r.processedChunks)
+            .append(",\"removedChunks\":")
+            .append(r.removedChunks)
             .append(",\"errors\":[")
         r.errors.forEachIndexed { i, e ->
             if (i > 0) sb.append(",")
-            sb.append("{\"path\":\"").append(esc(e.path)).append("\",")
-                .append("\"kind\":\"").append(esc(e.kind)).append("\",")
-                .append("\"message\":\"").append(esc(e.message)).append("\"}")
+            sb
+                .append("{\"path\":\"")
+                .append(esc(e.path))
+                .append("\",")
+                .append("\"kind\":\"")
+                .append(esc(e.kind))
+                .append("\",")
+                .append("\"message\":\"")
+                .append(esc(e.message))
+                .append("\"}")
         }
         sb.append("]}")
         return sb.toString()
@@ -68,31 +78,55 @@ object ReportIO {
 
     fun toCsv(r: OptimizeReport): String {
         val sb = StringBuilder()
-        sb.append("processedChunks,removedChunks,errorsCount\n")
+        sb
+            .append("processedChunks,removedChunks,errorsCount\n")
             .append(
                 r.processedChunks,
-            ).append(",").append(r.removedChunks).append(",").append(r.errors.size).append("\n")
+            ).append(",")
+            .append(r.removedChunks)
+            .append(",")
+            .append(r.errors.size)
+            .append("\n")
         sb.append("path,kind,message\n")
         r.errors.forEach { e ->
             val path = e.path.replace("\"", "\"\"")
             val kind = e.kind.replace("\"", "\"\"")
             val message = e.message.replace("\"", "\"\"")
-            sb.append("\"").append(path).append("\",")
-                .append("\"").append(kind).append("\",")
-                .append("\"").append(message).append("\"\n")
+            sb
+                .append("\"")
+                .append(path)
+                .append("\",")
+                .append("\"")
+                .append(kind)
+                .append("\",")
+                .append("\"")
+                .append(message)
+                .append("\"\n")
         }
         return sb.toString()
     }
 
     fun toText(r: OptimizeReport): String {
         val sb = StringBuilder()
-        sb.append("Statistics: processed=").append(r.processedChunks)
-            .append(" removed=").append(r.removedChunks)
-            .append(" errors=").append(r.errors.size).append("\n")
+        sb
+            .append("Statistics: processed=")
+            .append(r.processedChunks)
+            .append(" removed=")
+            .append(r.removedChunks)
+            .append(" errors=")
+            .append(r.errors.size)
+            .append("\n")
         if (r.errors.isNotEmpty()) {
             sb.append("Error list:\n")
             r.errors.forEach { e ->
-                sb.append("[").append(e.kind).append("] ").append(e.path).append(" - ").append(e.message).append("\n")
+                sb
+                    .append("[")
+                    .append(e.kind)
+                    .append("] ")
+                    .append(e.path)
+                    .append(" - ")
+                    .append(e.message)
+                    .append("\n")
             }
         }
         return sb.toString().trimEnd()

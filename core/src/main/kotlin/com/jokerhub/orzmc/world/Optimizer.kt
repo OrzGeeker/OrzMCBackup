@@ -65,7 +65,9 @@ object DefaultOptimizer : OptimizerEngine {
     ): List<Path> {
         val tasks = mutableListOf<Path>()
         if (isDimensionDir(fs, root)) tasks.add(root)
-        fs.walk(root).filter { it != root && fs.isDirectory(it) && isDimensionDir(fs, it) }
+        fs
+            .walk(root)
+            .filter { it != root && fs.isDirectory(it) && isDimensionDir(fs, it) }
             .forEach { tasks.add(it) }
         return tasks
     }
@@ -151,7 +153,9 @@ object DefaultOptimizer : OptimizerEngine {
         val progressTotal = totalChunks + miscTotal + zipSteps
         emit(ProgressStage.Discover, 0, totalChunks, input, "counting chunks")
 
-        val processedChunksAtomic = java.util.concurrent.atomic.AtomicLong(0L)
+        val processedChunksAtomic =
+            java.util.concurrent.atomic
+                .AtomicLong(0L)
 
         val ctx =
             DimensionContext(
@@ -220,7 +224,9 @@ object DefaultOptimizer : OptimizerEngine {
                 val nonEmpty = fs.list(output).isNotEmpty()
                 if (nonEmpty) {
                     if (request.outputOptions.force) {
-                        fs.walk(output).sortedByDescending { it.toString().length }
+                        fs
+                            .walk(output)
+                            .sortedByDescending { it.toString().length }
                             .forEach { fs.deleteIfExists(it) }
                         fs.createDirectories(output)
                     } else {
@@ -294,7 +300,9 @@ object DefaultOptimizer : OptimizerEngine {
         tasks: List<Path>,
     ): Long {
         var removedTotal = 0L
-        val executor = java.util.concurrent.Executors.newFixedThreadPool(ctx.parallelism)
+        val executor =
+            java.util.concurrent.Executors
+                .newFixedThreadPool(ctx.parallelism)
         val futures = mutableListOf<java.util.concurrent.Future<DimensionResult>>()
         tasks.forEach { dim ->
             val task = java.util.concurrent.Callable { processSingleDimension(ctx, dim) }
@@ -337,10 +345,19 @@ object DefaultOptimizer : OptimizerEngine {
                 InhabitedTimePattern(ctx.ticks, ctx.removeUnknown),
             )
         return DimensionProcessor.process(
-            ctx.fs, ctx.ioFactory, dim, targetDim, patterns,
-            ctx.record, ctx.progressSink, ctx.progressTotal,
-            ctx.progressInterval, ctx.progressIntervalMs,
-            ctx.processedChunksAtomic, ctx.strict, ctx.parallelism,
+            ctx.fs,
+            ctx.ioFactory,
+            dim,
+            targetDim,
+            patterns,
+            ctx.record,
+            ctx.progressSink,
+            ctx.progressTotal,
+            ctx.progressInterval,
+            ctx.progressIntervalMs,
+            ctx.processedChunksAtomic,
+            ctx.strict,
+            ctx.parallelism,
             dryRun = ctx.dryRun,
         )
     }

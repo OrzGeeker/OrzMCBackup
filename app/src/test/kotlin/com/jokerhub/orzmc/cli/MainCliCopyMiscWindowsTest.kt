@@ -77,7 +77,15 @@ class MainCliCopyMiscWindowsTest {
                 "--force",
             )
         assertTrue(exit == 0)
-        assertTrue(Files.exists(out.resolve("misc").resolve("sub").resolve("inner").resolve("readonly.txt")))
+        assertTrue(
+            Files.exists(
+                out
+                    .resolve("misc")
+                    .resolve("sub")
+                    .resolve("inner")
+                    .resolve("readonly.txt"),
+            ),
+        )
         assertTrue(Files.exists(out.resolve("misc").resolve("hidden.txt")))
         assertTrue(Files.exists(out.resolve("region").resolve("r.0.0.mca")))
         deleteTree(out)

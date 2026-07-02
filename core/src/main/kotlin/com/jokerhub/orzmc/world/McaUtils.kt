@@ -7,13 +7,12 @@ object McaUtils {
     fun isValidMca(
         fs: FileSystem,
         path: Path,
-    ): Boolean {
-        return try {
+    ): Boolean =
+        try {
             fs.size(path) >= 8192
         } catch (_: Exception) {
             false
         }
-    }
 
     fun countTotalChunks(
         fs: FileSystem,

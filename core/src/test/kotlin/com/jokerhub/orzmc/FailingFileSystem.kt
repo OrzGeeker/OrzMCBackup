@@ -24,9 +24,10 @@ class FailingFileSystem(
 
     private fun maybeFail(op: String) {
         if (op in failOnOps) throw IOException("injected failure for operation: $op")
-        failCounter?.get(
-            op,
-        )?.let { if (it.getAndSet(false)) throw IOException("injected single-shot failure for: $op") }
+        failCounter
+            ?.get(
+                op,
+            )?.let { if (it.getAndSet(false)) throw IOException("injected single-shot failure for: $op") }
     }
 
     override fun isDirectory(path: Path): Boolean = delegate.isDirectory(path)

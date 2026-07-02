@@ -11,7 +11,9 @@ object NoopProgressSink : ProgressSink {
 }
 
 /** A [ProgressSink] that forwards events to a callback function. */
-class CallbackProgressSink(private val callback: ((ProgressEvent) -> Unit)?) : ProgressSink {
+class CallbackProgressSink(
+    private val callback: ((ProgressEvent) -> Unit)?,
+) : ProgressSink {
     override fun emit(event: ProgressEvent) {
         callback?.invoke(event)
     }

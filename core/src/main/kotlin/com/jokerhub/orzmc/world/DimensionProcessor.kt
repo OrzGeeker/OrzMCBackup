@@ -58,17 +58,34 @@ internal object DimensionProcessor {
 
         if (regionParallelism > 1 && regionFiles.size > 1) {
             // Parallel region processing
-            val executor = java.util.concurrent.Executors.newFixedThreadPool(regionParallelism)
+            val executor =
+                java.util.concurrent.Executors
+                    .newFixedThreadPool(regionParallelism)
             try {
                 val futures =
                     regionFiles.map { rf ->
                         executor.submit(
                             java.util.concurrent.Callable {
                                 processSingleRegion(
-                                    fs, ioFactory, inputDim, targetDim, patterns,
-                                    onError, progressSink, totalChunks, progressInterval,
-                                    progressIntervalMs, processedCounter, strict,
-                                    useTime, lastEmit, regionDir, entitiesDir, poiDir, rf, dryRun,
+                                    fs,
+                                    ioFactory,
+                                    inputDim,
+                                    targetDim,
+                                    patterns,
+                                    onError,
+                                    progressSink,
+                                    totalChunks,
+                                    progressInterval,
+                                    progressIntervalMs,
+                                    processedCounter,
+                                    strict,
+                                    useTime,
+                                    lastEmit,
+                                    regionDir,
+                                    entitiesDir,
+                                    poiDir,
+                                    rf,
+                                    dryRun,
                                 )
                             },
                         )
@@ -93,10 +110,25 @@ internal object DimensionProcessor {
             regionFiles.forEach { rf ->
                 val r =
                     processSingleRegion(
-                        fs, ioFactory, inputDim, targetDim, patterns,
-                        onError, progressSink, totalChunks, progressInterval,
-                        progressIntervalMs, processedCounter, strict,
-                        useTime, lastEmit, regionDir, entitiesDir, poiDir, rf, dryRun,
+                        fs,
+                        ioFactory,
+                        inputDim,
+                        targetDim,
+                        patterns,
+                        onError,
+                        progressSink,
+                        totalChunks,
+                        progressInterval,
+                        progressIntervalMs,
+                        processedCounter,
+                        strict,
+                        useTime,
+                        lastEmit,
+                        regionDir,
+                        entitiesDir,
+                        poiDir,
+                        rf,
+                        dryRun,
                     )
                 removedTotal += r.removed
             }

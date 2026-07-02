@@ -8,7 +8,9 @@ class MemoryFSTest {
     @Test
     fun `memory fs basic ops`() {
         val fs = MemoryFS()
-        val root = java.nio.file.Paths.get("/mem/world")
+        val root =
+            java.nio.file.Paths
+                .get("/mem/world")
         fs.createDirectories(root)
         fs.createDirectories(root.resolve("region"))
         val file = root.resolve("region").resolve("r.0.0.mca")

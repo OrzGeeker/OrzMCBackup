@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- CI lint/coverage 升级至 JDK 25，本地与 CI 保持一致
+- detekt 升级至 `2.0.0-alpha.3`（插件 ID 变更为 `dev.detekt`），完全支持 JDK 25
+- ktlint 升级至 `14.2.0`
+- Gradle Wrapper 升级至 `9.6.1`
+- Shadow 升级至 `9.4.3`
+- JUnit 升级至 `6.1.1`
+- CI Actions：checkout 升级至 v7，codecov-action 升级至 v7
+
+### Fixed
+- 修复 ktlint 14.2.0 新增的代码风格检查（链式调用换行、参数格式等）
+- 修复 detekt 2.x 配置属性名称变更（threshold → allowedLines/allowedComplexity 等）
+- 移除 detekt JDK ≤ 21 的 skip 逻辑，detekt 2.x 原生支持 JDK 25
+
 ## v0.1.0 (2025-06-17)
 
 ### Features

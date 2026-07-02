@@ -22,7 +22,9 @@ interface RandomAccess {
 }
 
 /** [RandomAccess] implementation backed by a [RandomAccessFile]. */
-class RafAccess(private val raf: RandomAccessFile) : RandomAccess {
+class RafAccess(
+    private val raf: RandomAccessFile,
+) : RandomAccess {
     override fun seek(pos: Long) {
         raf.seek(pos)
     }
@@ -119,7 +121,9 @@ class BufferedRafAccess(
     }
 }
 
-class MemoryAccess(private val data: ByteArray) : RandomAccess {
+class MemoryAccess(
+    private val data: ByteArray,
+) : RandomAccess {
     private var pos: Int = 0
 
     override fun seek(pos: Long) {

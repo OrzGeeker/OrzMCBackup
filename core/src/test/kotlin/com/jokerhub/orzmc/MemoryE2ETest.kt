@@ -9,20 +9,22 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.nio.file.Files
 
 class MemoryE2ETest {
     @Test
     fun `end-to-end optimize with MemoryFS and MemoryMcaIOFactory`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         val data = McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
-        val out = java.nio.file.Paths.get("/mem/out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -43,12 +45,16 @@ class MemoryE2ETest {
     @Test
     fun `dry-run mode processes chunks without writing output`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/dryrun-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/dryrun-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         val data = McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
-        val out = java.nio.file.Paths.get("/mem/dryrun-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/dryrun-out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -71,7 +77,9 @@ class MemoryE2ETest {
     @Test
     fun `all chunks removed does not create empty MCA output`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/empty-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/empty-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         // MCA with 2 chunks, both with InhabitedTime=0 (unvisited)
@@ -83,7 +91,9 @@ class MemoryE2ETest {
                 ),
             )
         fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
-        val out = java.nio.file.Paths.get("/mem/empty-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/empty-out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -105,12 +115,16 @@ class MemoryE2ETest {
     @Test
     fun `dry-run mode removes nothing`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/dryrun-remove")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/dryrun-remove")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         val data = McaMemoryBuilder.buildSingleEntryMca(5, 100, CompressionKind.RAW)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
-        val out = java.nio.file.Paths.get("/mem/dryrun-out2")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/dryrun-out2")
         val request =
             OptimizerRequest(
                 input = world,
@@ -149,7 +163,9 @@ class MemoryE2ETest {
     @Test
     fun `removeUnknown true removes chunks without InhabitedTime tag`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/remove-unknown-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/remove-unknown-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
 
@@ -157,7 +173,9 @@ class MemoryE2ETest {
         val noInhabitedMca = McaMemoryBuilder.buildCustomPayloadMca(0, minimalNbtPayload(), CompressionKind.RAW)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), noInhabitedMca)
 
-        val out = java.nio.file.Paths.get("/mem/remove-unknown-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/remove-unknown-out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -179,14 +197,18 @@ class MemoryE2ETest {
     @Test
     fun `removeUnknown false keeps chunks without InhabitedTime tag`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/keep-unknown-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/keep-unknown-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
 
         val noInhabitedMca = McaMemoryBuilder.buildCustomPayloadMca(0, minimalNbtPayload(), CompressionKind.RAW)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), noInhabitedMca)
 
-        val out = java.nio.file.Paths.get("/mem/keep-unknown-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/keep-unknown-out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -208,7 +230,9 @@ class MemoryE2ETest {
     @Test
     fun `region-level parallelism processes all chunks correctly`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/parallel-region-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/parallel-region-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
 
@@ -225,13 +249,16 @@ class MemoryE2ETest {
             fs.write(world.resolve("region").resolve("r.0.$regionIdx.mca"), data)
         }
 
-        val out = java.nio.file.Paths.get("/mem/parallel-region-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/parallel-region-out")
         val request =
             OptimizerRequest(
                 input = world,
                 output = out,
                 filter = FilterOptions(inhabitedThresholdSeconds = 0),
-                runtime = RuntimeOptions(parallelism = 3), // triggers region-level parallel path
+                // triggers region-level parallel path
+                runtime = RuntimeOptions(parallelism = 3),
                 io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
             )
         val report = Optimizer.run(request)
@@ -266,7 +293,11 @@ class MemoryE2ETest {
                     )
                 val report = Optimizer.run(request)
                 // Should still process chunks despite corrupted force-load file
-                assertEquals(1, report.processedChunks, "chunks should be processed even with corrupted force-load file")
+                assertEquals(
+                    1,
+                    report.processedChunks,
+                    "chunks should be processed even with corrupted force-load file",
+                )
                 // Error should be recorded
                 assertTrue(
                     report.errors.any { it.kind == "ForceLoaded" },

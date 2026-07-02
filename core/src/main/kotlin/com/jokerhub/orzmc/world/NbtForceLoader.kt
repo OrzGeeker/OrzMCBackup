@@ -134,8 +134,8 @@ object NbtForceLoader {
         maxCompoundDepth: Int,
         maxArraySize: Int,
         maxListLength: Int,
-    ): Any {
-        return when (t) {
+    ): Any =
+        when (t) {
             TAG_BYTE -> inp.readByte()
             TAG_SHORT -> inp.readShort()
             TAG_INT -> inp.readInt()
@@ -174,5 +174,4 @@ object NbtForceLoader {
             }
             else -> throw IllegalArgumentException("unsupported tag $t")
         }
-    }
 }

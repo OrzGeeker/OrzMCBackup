@@ -273,7 +273,9 @@ private fun normalizeReportPath(
     return if (parent == null) Paths.get(fileName) else parent.resolve(fileName)
 }
 
-class FilterOptionsBuilder internal constructor(base: FilterOptions) {
+class FilterOptionsBuilder internal constructor(
+    base: FilterOptions,
+) {
     var inhabitedThresholdSeconds: Long = base.inhabitedThresholdSeconds
     var removeUnknown: Boolean = base.removeUnknown
     var strict: Boolean = base.strict
@@ -281,7 +283,9 @@ class FilterOptionsBuilder internal constructor(base: FilterOptions) {
     fun build(): FilterOptions = FilterOptions(inhabitedThresholdSeconds, removeUnknown, strict)
 }
 
-class OutputOptionsBuilder internal constructor(base: OutputOptions) {
+class OutputOptionsBuilder internal constructor(
+    base: OutputOptions,
+) {
     var inPlace: Boolean = base.inPlace
     var zipOutput: Boolean = base.zipOutput
     var force: Boolean = base.force
@@ -291,7 +295,9 @@ class OutputOptionsBuilder internal constructor(base: OutputOptions) {
     fun build(): OutputOptions = OutputOptions(inPlace, zipOutput, force, copyMisc, dryRun)
 }
 
-class ProgressOptionsBuilder internal constructor(base: ProgressOptions) {
+class ProgressOptionsBuilder internal constructor(
+    base: ProgressOptions,
+) {
     var interval: Long = base.interval
     var intervalMs: Long = base.intervalMs
     var sink: ProgressSink = base.sink
@@ -303,13 +309,17 @@ class ProgressOptionsBuilder internal constructor(base: ProgressOptions) {
     fun build(): ProgressOptions = ProgressOptions(interval, intervalMs, sink)
 }
 
-class RuntimeOptionsBuilder internal constructor(base: RuntimeOptions) {
+class RuntimeOptionsBuilder internal constructor(
+    base: RuntimeOptions,
+) {
     var parallelism: Int = base.parallelism
 
     fun build(): RuntimeOptions = RuntimeOptions(parallelism)
 }
 
-class HooksBuilder internal constructor(base: Hooks) {
+class HooksBuilder internal constructor(
+    base: Hooks,
+) {
     var onError: ((OptimizeError) -> Unit)? = base.onError
     var reportSink: ReportSink? = base.reportSink
     var metricsSink: MetricsSink? = base.metricsSink
@@ -317,7 +327,9 @@ class HooksBuilder internal constructor(base: Hooks) {
     fun build(): Hooks = Hooks(onError, reportSink, metricsSink)
 }
 
-class IOOptionsBuilder internal constructor(base: IOOptions) {
+class IOOptionsBuilder internal constructor(
+    base: IOOptions,
+) {
     var fs: FileSystem = base.fs
     var ioFactory: McaIOFactory = base.ioFactory
 

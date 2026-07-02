@@ -383,7 +383,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 | 工作流 | 触发条件 | 内容 |
 |--------|----------|------|
-| `test-matrix.yml` | push / PR | 3 JDK × 3 OS 矩阵测试 + Kover 覆盖率 |
+| `test-matrix.yml` | push / PR | 3 JDK × 3 OS 矩阵测试 + Kover 覆盖率（lint/coverage 使用 JDK 25） |
 | `release-lib.yml` | tag `v*` / manual | 签名并发布库到 Maven Central Portal |
 | `release-app.yml` | tag / manual | 构建 Shadow JAR + GitHub Release |
 | `dependabot.yml` | 每日 | 自动检查依赖更新 |
@@ -394,7 +394,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 | 模块 | 特性 |
 |------|------|
-| 根项目 | Kotlin 2.4.0、Gradle 9.5.1、JDK 17-29 校验 |
+| 根项目 | Kotlin 2.4.0、Gradle 9.6.1、JDK 17-29 校验 |
 | `core` | 库发布、签名、Dokka（Javadoc JAR）、test-fixtures |
 | `app` | Shadow JAR（fat JAR）、picocli CLI |
 
@@ -403,7 +403,7 @@ Minecraft Java 版世界优化工具，双用途：
 - **核心运行时**：Kotlin stdlib、`org.lz4:lz4-java:1.8.0`
 - **并发**：`kotlinx-coroutines-core:1.11.0`
 - **CLI**：`info.picocli:picocli:4.7.7`
-- **测试**：JUnit Jupiter 6.1.0 + Platform Launcher
+- **测试**：JUnit Jupiter 6.1.1 + Platform Launcher
 
 ---
 

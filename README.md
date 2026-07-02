@@ -282,14 +282,15 @@ OrzMCBackup/
 ```
 
 ## 构建环境与配置
-- Gradle Wrapper：**9.5.1**（Kotlin 2.4.0 / Shadow 9.4.2 兼容）
+- Gradle Wrapper：**9.6.1**（Kotlin 2.4.0 / Shadow 9.4.3 兼容）
 - Wrapper 配置位置：[gradle/wrapper/gradle-wrapper.properties](gradle/wrapper/gradle-wrapper.properties)
 - Wrapper 缓存：使用 GRADLE_USER_HOME（用户主目录）
 - 插件版本与仓源统一在根项目声明：[build.gradle.kts](build.gradle.kts)
 
 - 所有模块的 group 与 version 由根项目统一注入（支持 CI 通过 -Pversion 传入）
-- **JDK 要求**：Java 17+（JUnit 6.1.0 最低要求）
+- **JDK 要求**：Java 17+（JUnit 6.1.1 最低要求）
 - CI 测试矩阵：Java 17 / 21 / 25 × ubuntu / macos / windows
+- CI lint/coverage：JDK 25
 
 ## 发布到 Maven Central（Publisher Portal 原生）
 - 本地生成可上传 bundle：
@@ -301,7 +302,7 @@ OrzMCBackup/
 - GitHub Actions 工作流：[release-lib.yml](.github/workflows/release-lib.yml)
   - 触发：push 标签 vX.Y.Z 或手动 workflow_dispatch
   - 版本：VERSION=${GITHUB_REF_NAME#v} 或 inputs.version
-  - JDK：Temurin 21（构建用，产物目标 Java 17）
+  - JDK：Temurin 25（构建用，产物目标 Java 17）
   - 流程：运行 :core:test/:app:test → :core:portalBundle → 生成 sha256 → 校验签名与包 → 上传 Portal
   - 上传：Bearer Token（Authorization: Bearer $CENTRAL_TOKEN）
 - 仓库 Secrets：

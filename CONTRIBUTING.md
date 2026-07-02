@@ -8,7 +8,7 @@
 2. **本地开发**：参考 [CLAUDE.md](CLAUDE.md) 中的常用命令
 3. **提交 PR** 前确保：
    - `./gradlew ktlintCheck --no-daemon` 通过（代码风格）
-   - `./gradlew detekt --no-daemon` 通过（静态分析，JDK ≤ 21）
+   - `./gradlew detekt --no-daemon` 通过（静态分析）
    - `./gradlew :core:test :app:test --no-daemon` 通过（全部测试）
    - `./gradlew :core:koverVerify --no-daemon` 通过（覆盖率门禁 ≥ 75%）
 
@@ -42,5 +42,5 @@
 
 ## 构建要求
 
-- JDK 17+（推荐 JDK 21，与 CI 一致）
+- JDK 17+（推荐 JDK 25，与 CI lint/coverage 一致）
 - Dependabot 自动管理依赖更新；手动更新请确保 Version Catalog (`gradle/libs.versions.toml`) 同步更新

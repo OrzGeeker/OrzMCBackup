@@ -30,11 +30,15 @@ class MainCliReportTest {
             CommandLine(Main()).execute(
                 input.toString(),
                 out.toString(),
-                "-t", "0",
-                "--progress-mode", "Off",
+                "-t",
+                "0",
+                "--progress-mode",
+                "Off",
                 "--force",
-                "--report-file", report.toString(),
-                "--report-format", "json",
+                "--report-file",
+                report.toString(),
+                "--report-format",
+                "json",
             )
         assertTrue(exit == 0)
         val content = String(Files.readAllBytes(report), Charsets.UTF_8)

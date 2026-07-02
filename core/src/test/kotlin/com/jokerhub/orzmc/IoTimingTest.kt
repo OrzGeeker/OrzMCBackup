@@ -17,7 +17,9 @@ class IoTimingTest {
     @Test
     fun `multi-region processing completes within time budget`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/timing-world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/timing-world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
 
@@ -47,7 +49,9 @@ class IoTimingTest {
             fs.write(world.resolve("region").resolve(name), data)
         }
 
-        val out = java.nio.file.Paths.get("/mem/timing-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/timing-out")
         val request =
             OptimizerRequest(
                 input = world,
@@ -72,9 +76,15 @@ class IoTimingTest {
     @Test
     fun `parallel processing is not slower than serial baseline`() {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/timing-parallel")
-        val dim1 = java.nio.file.Paths.get("/mem/timing-parallel/DIM1")
-        val dim2 = java.nio.file.Paths.get("/mem/timing-parallel/DIM2")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel")
+        val dim1 =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel/DIM1")
+        val dim2 =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel/DIM2")
 
         for (root in listOf(world, dim1, dim2)) {
             fs.createDirectories(root)
@@ -83,7 +93,9 @@ class IoTimingTest {
             fs.write(root.resolve("region").resolve("r.0.0.mca"), data)
         }
 
-        val out = java.nio.file.Paths.get("/mem/timing-parallel-out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel-out")
 
         // Serial run
         val serialRequest =
@@ -110,8 +122,12 @@ class IoTimingTest {
             val data = McaMemoryBuilder.buildSingleEntryMca(0, 5000, CompressionKind.RAW)
             fs2.write(newRoot.resolve("region").resolve("r.0.0.mca"), data)
         }
-        val out2 = java.nio.file.Paths.get("/mem/timing-parallel-out2")
-        val world2 = java.nio.file.Paths.get("/mem/timing-parallel2")
+        val out2 =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel-out2")
+        val world2 =
+            java.nio.file.Paths
+                .get("/mem/timing-parallel2")
 
         val parallelRequest =
             OptimizerRequest(

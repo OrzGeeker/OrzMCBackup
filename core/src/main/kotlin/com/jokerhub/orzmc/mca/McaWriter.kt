@@ -12,7 +12,9 @@ import java.nio.ByteOrder
  * the location/timestamp header tables. Call [writeEntry] for each chunk,
  * then [finalizeFile] to flush the header, then [close].
  */
-class McaWriter(path: String) {
+class McaWriter(
+    path: String,
+) {
     private val file = RandomAccessFile(File(path), "rw")
     private var dataOffset = 8192L
     private val offsets = IntArray(1024)

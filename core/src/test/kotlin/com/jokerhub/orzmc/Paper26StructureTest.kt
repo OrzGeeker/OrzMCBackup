@@ -442,7 +442,8 @@ class Paper26StructureTest {
         val request =
             OptimizerRequest(
                 input = input,
-                output = null, // inPlace doesn't need output path
+                // inPlace doesn't need output path
+                output = null,
                 filter = FilterOptions(inhabitedThresholdSeconds = 0),
                 outputOptions = OutputOptions(inPlace = true),
                 io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
@@ -514,7 +515,10 @@ class Paper26StructureTest {
         )
         fs.createDirectories(customDim.resolve("data"))
         fs.createDirectories(customDim.resolve("data").resolve("my_datapack"))
-        fs.write(customDim.resolve("data").resolve("my_datapack").resolve("custom_state.dat"), "custom".toByteArray(Charsets.UTF_8))
+        fs.write(
+            customDim.resolve("data").resolve("my_datapack").resolve("custom_state.dat"),
+            "custom".toByteArray(Charsets.UTF_8),
+        )
 
         val output = Paths.get("/mem/custom-ns-out")
         val request =
@@ -538,8 +542,12 @@ class Paper26StructureTest {
             fs.exists(output.resolve("world/dimensions/my_datapack/custom_dimension/entities/r.0.0.mca")),
             "custom namespace dimension entities should be copied",
         )
+        val miscDataPath =
+            output.resolve(
+                "world/dimensions/my_datapack/custom_dimension/data/my_datapack/custom_state.dat",
+            )
         assertTrue(
-            fs.exists(output.resolve("world/dimensions/my_datapack/custom_dimension/data/my_datapack/custom_state.dat")),
+            fs.exists(miscDataPath),
             "custom namespace dimension misc files should be copied",
         )
 

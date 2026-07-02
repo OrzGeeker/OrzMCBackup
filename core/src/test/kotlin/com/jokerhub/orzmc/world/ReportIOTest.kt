@@ -114,7 +114,12 @@ class ReportIOTest {
                 it.toFile().deleteOnExit()
             }
         ReportIO.write(report, tmpFile, "json")
-        val content = String(java.nio.file.Files.readAllBytes(tmpFile), Charsets.UTF_8)
+        val content =
+            String(
+                java.nio.file.Files
+                    .readAllBytes(tmpFile),
+                Charsets.UTF_8,
+            )
         assertTrue(content.contains("\"processedChunks\":5"))
     }
 
@@ -126,7 +131,12 @@ class ReportIOTest {
                 it.toFile().deleteOnExit()
             }
         ReportIO.write(report, tmpFile, "csv")
-        val content = String(java.nio.file.Files.readAllBytes(tmpFile), Charsets.UTF_8)
+        val content =
+            String(
+                java.nio.file.Files
+                    .readAllBytes(tmpFile),
+                Charsets.UTF_8,
+            )
         assertTrue(content.contains("5,2,0"))
     }
 }

@@ -25,7 +25,8 @@ class McaWriterTest {
                     McaMemoryBuilder.MemChunk(index = 5, inhabited = 2000, kind = CompressionKind.RAW),
                 ),
             )
-        java.nio.file.Files.write(srcFile, mcaBytes)
+        java.nio.file.Files
+            .write(srcFile, mcaBytes)
 
         // Keep reader open while writer writes (same pattern as DimensionProcessor.process())
         val reader = McaReader.open(srcFile.toString())
@@ -50,7 +51,9 @@ class McaWriterTest {
         }
 
         // Verify output file size >= 8192
-        val fileSize = java.nio.file.Files.size(outFile)
+        val fileSize =
+            java.nio.file.Files
+                .size(outFile)
         assertTrue(fileSize >= 8192, "file should be at least 8192 bytes")
 
         // Verify header structure
@@ -100,7 +103,9 @@ class McaWriterTest {
         } finally {
             writer.close()
         }
-        val fileSize = java.nio.file.Files.size(mcaPath)
+        val fileSize =
+            java.nio.file.Files
+                .size(mcaPath)
         assertTrue(fileSize >= 8192, "empty mca should be at least 8192 bytes (header only)")
 
         // All offsets should be zero
@@ -124,7 +129,8 @@ class McaWriterTest {
         val srcFile = tempDir.resolve("r.0.0.mca")
         val outFile = tempDir.resolve("out.mca")
         val rawEntryBytes = McaMemoryBuilder.buildSingleEntryMca(5, 5000, CompressionKind.ZLIB)
-        java.nio.file.Files.write(srcFile, rawEntryBytes)
+        java.nio.file.Files
+            .write(srcFile, rawEntryBytes)
 
         // Keep reader open while writer writes
         val reader = McaReader.open(srcFile.toString())
@@ -144,7 +150,8 @@ class McaWriterTest {
 
         // Copy to valid MCA filename for McaReader and read back
         val readBackFile = tempDir.resolve("r.0.0.mca")
-        java.nio.file.Files.copy(outFile, readBackFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        java.nio.file.Files
+            .copy(outFile, readBackFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         val readBackReader = McaReader.open(readBackFile.toString())
         try {
             val entries = readBackReader.entries()

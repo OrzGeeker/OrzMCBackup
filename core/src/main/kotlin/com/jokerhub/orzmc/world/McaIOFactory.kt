@@ -59,7 +59,9 @@ class DefaultMcaIOFactory : McaIOFactory {
     }
 }
 
-class RealMcaWriterAdapter(private val delegate: McaWriter) : McaWriterLike {
+class RealMcaWriterAdapter(
+    private val delegate: McaWriter,
+) : McaWriterLike {
     override fun writeEntry(entry: McaEntry) {
         delegate.writeEntry(entry)
     }
@@ -76,7 +78,9 @@ class RealMcaWriterAdapter(private val delegate: McaWriter) : McaWriterLike {
     }
 }
 
-class RealMcaReaderAdapter(private val delegate: McaReader) : McaReaderLike {
+class RealMcaReaderAdapter(
+    private val delegate: McaReader,
+) : McaReaderLike {
     override fun entries(): List<McaEntry> = delegate.entries()
 
     override fun get(index: Int): McaEntry? = delegate.get(index)
@@ -89,7 +93,10 @@ class RealMcaReaderAdapter(private val delegate: McaReader) : McaReaderLike {
     }
 }
 
-class MemoryMcaWriter(private val mem: MemoryFS, private val path: Path) : McaWriterLike {
+class MemoryMcaWriter(
+    private val mem: MemoryFS,
+    private val path: Path,
+) : McaWriterLike {
     private var dataOffset = 8192
     private val offsets = IntArray(1024)
     private val sizes = IntArray(1024)
@@ -111,14 +118,20 @@ class MemoryMcaWriter(private val mem: MemoryFS, private val path: Path) : McaWr
     }
 
     override fun finalizeFile() {
-        val loc = java.nio.ByteBuffer.allocate(4096).order(java.nio.ByteOrder.BIG_ENDIAN)
+        val loc =
+            java.nio.ByteBuffer
+                .allocate(4096)
+                .order(java.nio.ByteOrder.BIG_ENDIAN)
         for (i in 0 until 1024) {
             val offSectors = (offsets[i] / 4096)
             val sizeSectors = (sizes[i] / 4096)
             val v = (offSectors shl 8) or (sizeSectors and 0xFF)
             loc.putInt(v)
         }
-        val time = java.nio.ByteBuffer.allocate(4096).order(java.nio.ByteOrder.BIG_ENDIAN)
+        val time =
+            java.nio.ByteBuffer
+                .allocate(4096)
+                .order(java.nio.ByteOrder.BIG_ENDIAN)
         for (i in 0 until 1024) {
             time.putInt(timestamps[i])
         }

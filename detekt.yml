@@ -13,8 +13,14 @@ style:
   # CLI Main.kt 使用 wildcard import（picocli 和 world 包）
   WildcardImport:
     active: false
-  # 允许在测试代码中使用未使用参数
-  UnusedPrivateMember:
+  # 允许在测试代码中使用未使用的私有成员
+  UnusedPrivateClass:
+    active: true
+    excludes: ['**/test/**', '**/testFixtures/**']
+  UnusedPrivateFunction:
+    active: true
+    excludes: ['**/test/**', '**/testFixtures/**']
+  UnusedPrivateProperty:
     active: true
     excludes: ['**/test/**', '**/testFixtures/**']
   # 允许直接 throw IllegalArgumentException（MCA 解析需要）
@@ -27,6 +33,9 @@ style:
   # DimensionProcessor 的 unused 参数是接口契约所需
   UnusedParameter:
     active: false
+  # MemoryFS.copy() 多处 throw 用于参数校验，有意如此
+  ThrowsCount:
+    active: false
 
 empty-blocks:
   # NoopSink 接口默认实现有意为空
@@ -37,27 +46,27 @@ complexity:
   # 核心引擎和 CLI 入口方法较长（call() ~200行, processSingleRegion ~170行）
   LongMethod:
     active: true
-    threshold: 200
+    allowedLines: 200
   # CLI Main.call() 含大量 when 分支（圈复杂度 ~46）
   CyclomaticComplexMethod:
     active: true
-    threshold: 50
+    allowedComplexity: 50
   # DimensionProcessor 和 CLI 有较深嵌套
   NestedBlockDepth:
     active: true
-    threshold: 10
+    allowedDepth: 10
   # 允许较多的类方法 — FileSystem 接口 14 个，RealFileSystem/DefaultOptimizer 13-14 个
   TooManyFunctions:
     active: true
-    thresholdInFiles: 20
-    thresholdInClasses: 20
-    thresholdInInterfaces: 15
-    thresholdInObjects: 15
+    allowedFunctionsPerFile: 20
+    allowedFunctionsPerClass: 20
+    allowedFunctionsPerInterface: 15
+    allowedFunctionsPerObject: 15
   # 核心引擎函数参数较多（context 模式），提高阈值
   LongParameterList:
     active: true
-    functionThreshold: 20
-    constructorThreshold: 10
+    allowedFunctionParameters: 20
+    allowedConstructorParameters: 10
 
 naming:
   # CLI 入口 Main.companion.main() 是标准 Kotlin 入口签名

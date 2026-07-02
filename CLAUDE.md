@@ -8,6 +8,9 @@
 # 构建 CLI fat JAR（产物位于 app/build/libs/backup-<version>.jar）
 ./gradlew :app:shadowJar --no-daemon
 
+# 运行代码风格和静态分析检查
+./gradlew ktlintCheck detekt --no-daemon
+
 # 运行所有测试
 ./gradlew :core:test :app:test --no-daemon
 
@@ -31,7 +34,7 @@
 ./gradlew :core:printTestPaths --no-daemon
 ```
 
-**JDK 要求：** Java 17+（构建脚本明确阻止 JDK 30+）。CI 使用 Temurin 21，本地开发可用任意 JDK 17-29。
+**JDK 要求：** Java 17+（构建脚本明确阻止 JDK 30+）。CI 使用 Temurin 25（lint/coverage），本地开发可用任意 JDK 17-29。
 
 ## 项目概览
 
@@ -103,7 +106,9 @@ CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
 - 真实 MCA 夹具文件位于 `core/src/test/resources/Fixtures/`
 - `TestPaths` 工具定位基于磁盘测试的夹具目录
 - CI 矩阵：Java 17/21/25 × Ubuntu/macOS/Windows
+- Lint/Coverage：JDK 25
 - 通过 Kover 生成覆盖率报告（`.github/workflows/test-matrix.yml`）
+- detekt 2.0.0-alpha.3 + ktlint 14.2.0 进行代码质量和风格检查
 
 ### CI/CD 工作流
 

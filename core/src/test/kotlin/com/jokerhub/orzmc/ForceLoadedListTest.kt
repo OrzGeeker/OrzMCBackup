@@ -10,9 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
-import java.nio.file.Path
 
 class ForceLoadedListTest {
     @Test
@@ -41,9 +39,10 @@ class ForceLoadedListTest {
         val forced = NbtForceLoader.parse(ticketsFile.toFile())
         val pattern = ListPattern(forced.map { it.first to it.second })
         val entries =
-            McaReader.open(
-                TestPaths.world26_1Dimension("overworld", "region/r.0.0.mca").toString(),
-            ).use { it.entries() }
+            McaReader
+                .open(
+                    TestPaths.world26_1Dimension("overworld", "region/r.0.0.mca").toString(),
+                ).use { it.entries() }
         val anyMatch = entries.any { pattern.matches(it) }
         assertTrue(anyMatch, "expected at least one entry to match 26.1+ forced chunks")
     }

@@ -28,13 +28,17 @@ class McaMemoryParamTest {
         removedExpected: Long,
     ) {
         val fs = MemoryFS()
-        val world = java.nio.file.Paths.get("/mem/world")
+        val world =
+            java.nio.file.Paths
+                .get("/mem/world")
         fs.createDirectories(world)
         fs.createDirectories(world.resolve("region"))
         val method = CompressionKind.valueOf(comp)
         val bytes = McaMemoryBuilder.buildSingleEntryMca(0, 1000L, method)
         fs.write(world.resolve("region").resolve("r.0.0.mca"), bytes)
-        val out = java.nio.file.Paths.get("/mem/out")
+        val out =
+            java.nio.file.Paths
+                .get("/mem/out")
         val request =
             OptimizerRequest(
                 input = world,

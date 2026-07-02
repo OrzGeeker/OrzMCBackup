@@ -120,8 +120,8 @@ class Main : Callable<Int> {
     )
     var dryRun: Boolean = false
 
-    override fun call(): Int {
-        return try {
+    override fun call(): Int =
+        try {
             val reportSink = reportFile?.let { FileReportSink(it, reportFormat) }
             val progressPrinter: ((ProgressEvent) -> Unit)? =
                 when (progressMode) {
@@ -224,7 +224,6 @@ class Main : Callable<Int> {
             logger.error("发生错误：" + (e.message ?: e.toString()))
             1
         }
-    }
 
     companion object {
         @JvmStatic

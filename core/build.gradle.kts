@@ -18,13 +18,6 @@ detekt {
     config.setFrom(rootProject.file("detekt.yml"))
 }
 
-tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    // detekt 1.23.x requires JDK ≤ 21 for type-resolution compilation.
-    // On JDK 25+ the task is skipped locally; CI runs JDK 21 so it always works.
-    val jvmVersion = System.getProperty("java.version")?.substringBefore(".")?.toIntOrNull() ?: 0
-    onlyIf("detekt requires JDK ≤ 21 (current: $jvmVersion)") { jvmVersion <= 21 }
-}
-
 // Use current JDK; no enforced toolchain to ease local builds
 
 dependencies {
@@ -131,7 +124,13 @@ publishing {
     repositories {
         maven {
             name = "portalRepo"
-            url = uri(layout.buildDirectory.dir("portal-repo").map { it.asFile.toURI().toString() }.get())
+            url =
+                uri(
+                    layout.buildDirectory
+                        .dir("portal-repo")
+                        .map { it.asFile.toURI().toString() }
+                        .get(),
+                )
         }
     }
 }
