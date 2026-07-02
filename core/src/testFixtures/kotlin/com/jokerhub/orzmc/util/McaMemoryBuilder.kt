@@ -117,6 +117,49 @@ object McaMemoryBuilder {
         return final.toByteArray()
     }
 
+    /**
+     * Build an MCA file with a single chunk at [index] whose decompressed NBT payload is
+     * the given [payload] bytes compressed with [kind]. This lets tests create chunks
+     * without an `InhabitedTime` tag or with any custom NBT structure.
+     */
+    fun buildCustomPayloadMca(
+        index: Int,
+        payload: ByteArray,
+        kind: CompressionKind,
+    ): ByteArray {
+        val (method, body) = compress(kind, payload)
+        val loc = ByteArray(4096)
+        val bbLoc = ByteBuffer.wrap(loc).order(ByteOrder.BIG_ENDIAN)
+        val time = ByteArray(4096)
+        val bbTime = ByteBuffer.wrap(time).order(ByteOrder.BIG_ENDIAN)
+        val data = ByteArrayOutputStream()
+        var offsetBytes = 8192
+
+        val lenBuf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(1 + body.size).array()
+        data.write(lenBuf)
+        data.write(byteArrayOf(method.toByte()))
+        data.write(body)
+        val written = 4 + 1 + body.size
+        val pad = (4096 - (written % 4096)) % 4096
+        if (pad > 0) data.write(ByteArray(pad))
+        val offSectors = (offsetBytes / 4096)
+        val sizeSectors = (written + pad) / 4096
+        val v = (offSectors shl 8) or (sizeSectors and 0xFF)
+        bbLoc.position(index * 4)
+        bbLoc.putInt(v)
+        bbTime.position(index * 4)
+        bbTime.putInt((System.currentTimeMillis() / 1000).toInt())
+        offsetBytes += written + pad
+
+        val header = ByteArrayOutputStream()
+        header.write(loc)
+        header.write(time)
+        val out = ByteArrayOutputStream()
+        out.write(header.toByteArray())
+        out.write(data.toByteArray())
+        return out.toByteArray()
+    }
+
     fun buildMca(chunks: List<MemChunk>): ByteArray {
         val loc = ByteArray(4096)
         val bbLoc = ByteBuffer.wrap(loc).order(ByteOrder.BIG_ENDIAN)

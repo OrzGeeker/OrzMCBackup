@@ -226,4 +226,393 @@ class Paper26StructureTest {
         )
         assertFalse(fs.exists(output.resolve("world/players/p.dat")), "players should NOT be written in dry run")
     }
+
+    /**
+     * Simulate the real old Paper (pre-26.1) server root layout with three
+     * separate world directories — overworld at `world/`, nether inside
+     * `world_nether/DIM-1/`, and end inside `world_the_end/DIM1/`.
+     *
+     * This is the structure documented in the Paper 26.1 migration report
+     * and represents how servers looked before the Vanilla-format migration.
+     */
+    @Test
+    fun `old paper multi world dir layout discovers all dimensions and preserves misc`() {
+        val fs = MemoryFS()
+        val serverRoot = Paths.get("/mem/old-paper-server")
+        fs.createDirectories(serverRoot)
+
+        // world/ — overworld (region/entities/poi at root)
+        val world = serverRoot.resolve("world")
+        fs.createDirectories(world)
+        fs.write(world.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.write(world.resolve("paper-world.yml"), "paper-config".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(world.resolve("playerdata"))
+        fs.write(world.resolve("playerdata").resolve("player1.dat"), "player1".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(world.resolve("stats"))
+        fs.write(world.resolve("stats").resolve("player1.json"), "stats1".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(world.resolve("region"))
+        fs.write(
+            world.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(world.resolve("entities"))
+        fs.write(
+            world.resolve("entities").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(world.resolve("poi"))
+        fs.write(
+            world.resolve("poi").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        // Overworld dimension data/
+        fs.createDirectories(world.resolve("data"))
+        fs.write(world.resolve("data").resolve("idcounts.dat"), "idcounts".toByteArray(Charsets.UTF_8))
+
+        // world_nether/DIM-1/ — nether (DIM-1 inside world_nether)
+        val worldNether = serverRoot.resolve("world_nether")
+        fs.createDirectories(worldNether)
+        val dimNeg1 = worldNether.resolve("DIM-1")
+        fs.createDirectories(dimNeg1)
+        fs.createDirectories(dimNeg1.resolve("region"))
+        fs.write(
+            dimNeg1.resolve("region").resolve("r.-1.-1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(dimNeg1.resolve("entities"))
+        fs.write(
+            dimNeg1.resolve("entities").resolve("r.-1.-1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        // Nether dimension data/
+        fs.createDirectories(dimNeg1.resolve("data"))
+        fs.write(dimNeg1.resolve("data").resolve("Fortress_index.dat"), "fortress".toByteArray(Charsets.UTF_8))
+        fs.write(dimNeg1.resolve("data").resolve("raids_nether.dat"), "raids-nether".toByteArray(Charsets.UTF_8))
+
+        // world_the_end/DIM1/ — end (DIM1 inside world_the_end)
+        val worldTheEnd = serverRoot.resolve("world_the_end")
+        fs.createDirectories(worldTheEnd)
+        val dim1 = worldTheEnd.resolve("DIM1")
+        fs.createDirectories(dim1)
+        fs.createDirectories(dim1.resolve("region"))
+        fs.write(
+            dim1.resolve("region").resolve("r.1.1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(dim1.resolve("poi"))
+        fs.write(
+            dim1.resolve("poi").resolve("r.1.1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        // End dimension data/
+        fs.createDirectories(dim1.resolve("data"))
+        fs.write(dim1.resolve("data").resolve("EndCity_index.dat"), "endcity".toByteArray(Charsets.UTF_8))
+        fs.write(dim1.resolve("data").resolve("raids_end.dat"), "raids-end".toByteArray(Charsets.UTF_8))
+
+        val output = Paths.get("/mem/old-paper-out")
+        val request =
+            OptimizerRequest(
+                input = serverRoot,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks from all 3 dimensions")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+
+        // Overworld dimension region
+        assertTrue(
+            fs.exists(output.resolve("world/region/r.0.0.mca")),
+            "overworld region should be in output",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/entities/r.0.0.mca")),
+            "overworld entities should be in output",
+        )
+
+        // Overworld misc files (playerdata, stats, paper-world.yml)
+        assertTrue(
+            fs.exists(output.resolve("world/level.dat")),
+            "world/level.dat should be copied as misc",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/playerdata/player1.dat")),
+            "world/playerdata should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/stats/player1.json")),
+            "world/stats should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/paper-world.yml")),
+            "world/paper-world.yml should be copied",
+        )
+
+        // Nether dimension
+        assertTrue(
+            fs.exists(output.resolve("world_nether/DIM-1/region/r.-1.-1.mca")),
+            "nether region should be in output (preserving world_nether/DIM-1 layout)",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world_nether/DIM-1/entities/r.-1.-1.mca")),
+            "nether entities should be in output",
+        )
+
+        // End dimension
+        assertTrue(
+            fs.exists(output.resolve("world_the_end/DIM1/region/r.1.1.mca")),
+            "end region should be in output (preserving world_the_end/DIM1 layout)",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world_the_end/DIM1/poi/r.1.1.mca")),
+            "end poi should be in output",
+        )
+
+        // Verify dimension-level data files are preserved
+        assertTrue(
+            fs.exists(output.resolve("world_nether/DIM-1/data/Fortress_index.dat")),
+            "nether dimension data/Fortress_index.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world_nether/DIM-1/data/raids_nether.dat")),
+            "nether dimension data/raids_nether.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world_the_end/DIM1/data/EndCity_index.dat")),
+            "end dimension data/EndCity_index.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world_the_end/DIM1/data/raids_end.dat")),
+            "end dimension data/raids_end.dat should be preserved",
+        )
+        // Overworld dimension-level data
+        assertTrue(
+            fs.exists(output.resolve("world/data/idcounts.dat")),
+            "overworld data/idcounts.dat should be preserved",
+        )
+
+        // Verify dimension dirs don't contain overworld misc
+        assertFalse(
+            fs.exists(output.resolve("world_nether/DIM-1/level.dat")),
+            "nether dimension should not contain overworld level.dat",
+        )
+        assertFalse(
+            fs.exists(output.resolve("world_the_end/DIM1/level.dat")),
+            "end dimension should not contain overworld level.dat",
+        )
+    }
+
+    @Test
+    fun `nested 26 dot 1 structure works with inPlace mode`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/paper26-inplace")
+        fs.createDirectories(input)
+
+        val worldRoot = input.resolve("world")
+        fs.createDirectories(worldRoot)
+        fs.write(worldRoot.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("players"))
+        fs.write(worldRoot.resolve("players").resolve("p.dat"), "p".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("data"))
+        fs.write(worldRoot.resolve("data").resolve("misc.dat"), "misc".toByteArray(Charsets.UTF_8))
+
+        val overworld = worldRoot.resolve("dimensions/minecraft/overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(overworld.resolve("entities"))
+        fs.write(
+            overworld.resolve("entities").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val nether = worldRoot.resolve("dimensions/minecraft/the_nether")
+        fs.createDirectories(nether)
+        fs.createDirectories(nether.resolve("region"))
+        fs.write(
+            nether.resolve("region").resolve("r.-1.-1.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = null, // inPlace doesn't need output path
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(inPlace = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks in inPlace mode")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+
+        // After inPlace replacement, overworld region should still exist at original location
+        assertTrue(
+            fs.exists(input.resolve("world/dimensions/minecraft/overworld/region/r.0.0.mca")),
+            "overworld region should exist after inPlace replacement",
+        )
+        assertTrue(
+            fs.exists(input.resolve("world/dimensions/minecraft/the_nether/region/r.-1.-1.mca")),
+            "nether region should exist after inPlace replacement",
+        )
+
+        // Root-level misc files should remain untouched by inPlace (they stay in input)
+        assertTrue(
+            fs.exists(input.resolve("world/level.dat")),
+            "world-level level.dat should remain after inPlace",
+        )
+        assertTrue(
+            fs.exists(input.resolve("world/players/p.dat")),
+            "players should remain after inPlace",
+        )
+    }
+
+    /**
+     * Custom dimension namespaces (non-minecraft) are supported because dimension
+     * discovery is name-agnostic — it walks for any directory containing a
+     * `region/` subdirectory. Datapacks and mods can add dimensions under their
+     * own namespace (e.g. `dimensions/my_datapack/custom_dim/`).
+     */
+    @Test
+    fun `custom dimension namespace is discovered and processed`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/custom-ns")
+        fs.createDirectories(input)
+
+        val worldRoot = input.resolve("world")
+        fs.createDirectories(worldRoot)
+        fs.write(worldRoot.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("players"))
+        fs.write(worldRoot.resolve("players").resolve("p.dat"), "p".toByteArray(Charsets.UTF_8))
+
+        // Standard minecraft namespace — overworld
+        val overworld = worldRoot.resolve("dimensions/minecraft/overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        // Non-minecraft namespace — custom datapack dimension
+        val customDim = worldRoot.resolve("dimensions/my_datapack/custom_dimension")
+        fs.createDirectories(customDim)
+        fs.createDirectories(customDim.resolve("region"))
+        fs.write(
+            customDim.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(customDim.resolve("entities"))
+        fs.write(
+            customDim.resolve("entities").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(customDim.resolve("data"))
+        fs.createDirectories(customDim.resolve("data").resolve("my_datapack"))
+        fs.write(customDim.resolve("data").resolve("my_datapack").resolve("custom_state.dat"), "custom".toByteArray(Charsets.UTF_8))
+
+        val output = Paths.get("/mem/custom-ns-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks from both namespaces")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+
+        // Custom dimension region/entities should be copied
+        assertTrue(
+            fs.exists(output.resolve("world/dimensions/my_datapack/custom_dimension/region/r.0.0.mca")),
+            "custom namespace dimension region should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/dimensions/my_datapack/custom_dimension/entities/r.0.0.mca")),
+            "custom namespace dimension entities should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/dimensions/my_datapack/custom_dimension/data/my_datapack/custom_state.dat")),
+            "custom namespace dimension misc files should be copied",
+        )
+
+        // Root misc files still copied
+        assertTrue(
+            fs.exists(output.resolve("world/level.dat")),
+            "root level.dat should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("world/players/p.dat")),
+            "players should be copied",
+        )
+    }
+
+    @Test
+    fun `copyMisc false skips misc files for nested 26 dot 1 structure`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/paper26-nomisc")
+        fs.createDirectories(input)
+
+        val worldRoot = input.resolve("world")
+        fs.createDirectories(worldRoot)
+        fs.write(worldRoot.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("players"))
+        fs.write(worldRoot.resolve("players").resolve("p.dat"), "p".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("data"))
+        fs.write(worldRoot.resolve("data").resolve("extra.dat"), "extra".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(worldRoot.resolve("generated"))
+        fs.write(worldRoot.resolve("generated").resolve("struct.nbt"), "nbt".toByteArray(Charsets.UTF_8))
+
+        val overworld = worldRoot.resolve("dimensions/minecraft/overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        val output = Paths.get("/mem/paper26-nomisc-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true, copyMisc = false),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+
+        // Dimension region should be copied
+        assertTrue(
+            fs.exists(output.resolve("world/dimensions/minecraft/overworld/region/r.0.0.mca")),
+            "region should be copied even when copyMisc=false",
+        )
+
+        // Misc files should NOT be copied
+        assertFalse(
+            fs.exists(output.resolve("world/level.dat")),
+            "level.dat should NOT be copied when copyMisc=false",
+        )
+        assertFalse(
+            fs.exists(output.resolve("world/players/p.dat")),
+            "players should NOT be copied when copyMisc=false",
+        )
+        assertFalse(
+            fs.exists(output.resolve("world/data/extra.dat")),
+            "data/extra.dat should NOT be copied when copyMisc=false",
+        )
+        assertFalse(
+            fs.exists(output.resolve("world/generated/struct.nbt")),
+            "generated/struct.nbt should NOT be copied when copyMisc=false",
+        )
+    }
 }

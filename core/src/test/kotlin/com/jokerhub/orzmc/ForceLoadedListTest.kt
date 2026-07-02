@@ -3,10 +3,16 @@ package com.jokerhub.orzmc
 import com.jokerhub.orzmc.mca.McaReader
 import com.jokerhub.orzmc.patterns.ListPattern
 import com.jokerhub.orzmc.util.TestPaths
+import com.jokerhub.orzmc.world.ForceLoad
+import com.jokerhub.orzmc.world.ForceLoadedParseException
 import com.jokerhub.orzmc.world.NbtForceLoader
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
+import java.nio.file.Path
 
 class ForceLoadedListTest {
     @Test
@@ -40,5 +46,57 @@ class ForceLoadedListTest {
             ).use { it.entries() }
         val anyMatch = entries.any { pattern.matches(it) }
         assertTrue(anyMatch, "expected at least one entry to match 26.1+ forced chunks")
+    }
+
+    @Test
+    fun `ForceLoad parse resolves chunk_tickets_dat via dimension path probe chain`() {
+        // Simulate the full resolution chain used by DefaultOptimizer.processSingleDimension:
+        //   ForceLoad.parse(dimension, strict) → probes data/minecraft/chunk_tickets.dat → data/chunks.dat
+        // The 26.1 fixture has BOTH files; the parser should use chunk_tickets.dat (higher priority).
+        val dimPath = TestPaths.world26_1Dimension("overworld")
+        val forced = ForceLoad.parse(dimPath, strict = false)
+        assertEquals(4, forced.size, "should resolve chunk_tickets.dat via dimension path probe chain")
+        assertTrue(forced.contains(0 to 0))
+    }
+
+    @Test
+    fun `ForceLoad parse falls back to chunks_dat when chunk_tickets is absent`() {
+        // The old fixture has only data/chunks.dat (no data/minecraft/chunk_tickets.dat).
+        // ForceLoad.parse should fall back and still return results.
+        val dimPath = TestPaths.world() // overworld dimension with data/chunks.dat
+        val forced = ForceLoad.parse(dimPath, strict = false)
+        assertTrue(forced.isNotEmpty(), "should resolve chunks.dat via fallback probe chain")
+    }
+
+    @Test
+    fun `ForceLoad parse strict true throws on corrupted NBT file`() {
+        // Create a fake chunks.dat that is not valid GZip NBT
+        val tmpDir = Files.createTempDirectory("force-strict-")
+        try {
+            val dataDir = tmpDir.resolve("data")
+            Files.createDirectories(dataDir)
+            Files.write(dataDir.resolve("chunks.dat"), "not-valid-gzip-data".toByteArray(Charsets.UTF_8))
+
+            assertThrows(ForceLoadedParseException::class.java) {
+                ForceLoad.parse(tmpDir, strict = true)
+            }
+        } finally {
+            tmpDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `ForceLoad parse strict false returns empty list on corrupted NBT file`() {
+        val tmpDir = Files.createTempDirectory("force-nonstrict-")
+        try {
+            val dataDir = tmpDir.resolve("data")
+            Files.createDirectories(dataDir)
+            Files.write(dataDir.resolve("chunks.dat"), "not-valid-gzip-data".toByteArray(Charsets.UTF_8))
+
+            val result = ForceLoad.parse(tmpDir, strict = false)
+            assertTrue(result.isEmpty(), "non-strict mode should return empty list on parse failure")
+        } finally {
+            tmpDir.toFile().deleteRecursively()
+        }
     }
 }

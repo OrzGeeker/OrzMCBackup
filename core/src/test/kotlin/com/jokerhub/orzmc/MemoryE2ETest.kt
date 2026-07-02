@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Files
 
 class MemoryE2ETest {
@@ -129,5 +132,151 @@ class MemoryE2ETest {
             fs.exists(out.resolve("region").resolve("r.0.0.mca")),
             "no output MCA file should exist in dry-run",
         )
+    }
+
+    /**
+     * A minimal valid NBT compound: TAG_Compound("") + TAG_End.
+     * No InhabitedTime tag — findInhabitedFast returns null for these chunks.
+     */
+    private fun minimalNbtPayload(): ByteArray {
+        val bos = ByteArrayOutputStream()
+        bos.write(0x0A) // TAG_Compound
+        bos.write(byteArrayOf(0x00, 0x00)) // name length = 0
+        bos.write(0x00) // TAG_End
+        return bos.toByteArray()
+    }
+
+    @Test
+    fun `removeUnknown true removes chunks without InhabitedTime tag`() {
+        val fs = MemoryFS()
+        val world = java.nio.file.Paths.get("/mem/remove-unknown-world")
+        fs.createDirectories(world)
+        fs.createDirectories(world.resolve("region"))
+
+        // Build MCA where the chunk payload has NO InhabitedTime tag
+        val noInhabitedMca = McaMemoryBuilder.buildCustomPayloadMca(0, minimalNbtPayload(), CompressionKind.RAW)
+        fs.write(world.resolve("region").resolve("r.0.0.mca"), noInhabitedMca)
+
+        val out = java.nio.file.Paths.get("/mem/remove-unknown-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                // threshold=0, removeUnknown=true: chunks without InhabitedTime → removed
+                filter = FilterOptions(inhabitedThresholdSeconds = 0, removeUnknown = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertEquals(1, report.processedChunks)
+        assertEquals(1, report.removedChunks, "chunk without InhabitedTime should be removed when removeUnknown=true")
+        // No output MCA — all chunks removed
+        assertFalse(
+            fs.exists(out.resolve("region").resolve("r.0.0.mca")),
+            "no output MCA when all chunks removed",
+        )
+    }
+
+    @Test
+    fun `removeUnknown false keeps chunks without InhabitedTime tag`() {
+        val fs = MemoryFS()
+        val world = java.nio.file.Paths.get("/mem/keep-unknown-world")
+        fs.createDirectories(world)
+        fs.createDirectories(world.resolve("region"))
+
+        val noInhabitedMca = McaMemoryBuilder.buildCustomPayloadMca(0, minimalNbtPayload(), CompressionKind.RAW)
+        fs.write(world.resolve("region").resolve("r.0.0.mca"), noInhabitedMca)
+
+        val out = java.nio.file.Paths.get("/mem/keep-unknown-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                // threshold=0, removeUnknown=false (default): chunks without InhabitedTime → kept
+                filter = FilterOptions(inhabitedThresholdSeconds = 0, removeUnknown = false),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertEquals(1, report.processedChunks)
+        assertEquals(0, report.removedChunks, "chunk without InhabitedTime should be kept when removeUnknown=false")
+        // Output MCA should exist
+        assertTrue(
+            fs.exists(out.resolve("region").resolve("r.0.0.mca")),
+            "output MCA should exist when chunk is kept",
+        )
+    }
+
+    @Test
+    fun `region-level parallelism processes all chunks correctly`() {
+        val fs = MemoryFS()
+        val world = java.nio.file.Paths.get("/mem/parallel-region-world")
+        fs.createDirectories(world)
+        fs.createDirectories(world.resolve("region"))
+
+        // Create 5 MCA files with multiple chunks each
+        repeat(5) { regionIdx ->
+            val data =
+                McaMemoryBuilder.buildMca(
+                    listOf(
+                        MemChunk(0, 1000, CompressionKind.RAW),
+                        MemChunk(1, 2000, CompressionKind.RAW),
+                        MemChunk(2, 500, CompressionKind.RAW),
+                    ),
+                )
+            fs.write(world.resolve("region").resolve("r.0.$regionIdx.mca"), data)
+        }
+
+        val out = java.nio.file.Paths.get("/mem/parallel-region-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                runtime = RuntimeOptions(parallelism = 3), // triggers region-level parallel path
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        // 5 regions × 3 chunks = 15 total
+        assertEquals(15, report.processedChunks, "all chunks from all regions should be processed")
+        assertEquals(0, report.removedChunks, "all chunks have InhabitedTime > 0 so should be kept with threshold=0")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+    }
+
+    @Test
+    fun `strict mode with corrupted force-load file records error and continues processing`() {
+        // ForceLoad.parse uses java.io.File internally, so this test uses a real temp
+        // directory so that the dimensional probe paths exist on the real filesystem.
+        val world = Files.createTempDirectory("strict-corrupt-force-world")
+        try {
+            Files.createDirectories(world.resolve("region"))
+            Files.write(
+                world.resolve("region").resolve("r.0.0.mca"),
+                McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+            )
+            // Create a corrupted data/chunks.dat (the fallback probe file)
+            Files.createDirectories(world.resolve("data"))
+            Files.write(world.resolve("data").resolve("chunks.dat"), "corrupted-not-gzip".toByteArray(Charsets.UTF_8))
+
+            val out = Files.createTempDirectory("strict-corrupt-force-out")
+            try {
+                val request =
+                    OptimizerRequest(
+                        input = world,
+                        output = out,
+                        filter = FilterOptions(inhabitedThresholdSeconds = 0, strict = true),
+                    )
+                val report = Optimizer.run(request)
+                // Should still process chunks despite corrupted force-load file
+                assertEquals(1, report.processedChunks, "chunks should be processed even with corrupted force-load file")
+                // Error should be recorded
+                assertTrue(
+                    report.errors.any { it.kind == "ForceLoaded" },
+                    "strict mode should record error for corrupted force-load file, got: ${report.errors}",
+                )
+            } finally {
+                out.toFile().deleteRecursively()
+            }
+        } finally {
+            world.toFile().deleteRecursively()
+        }
     }
 }
