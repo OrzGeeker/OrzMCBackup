@@ -623,4 +623,77 @@ class Paper26StructureTest {
             "generated/struct.nbt should NOT be copied when copyMisc=false",
         )
     }
+
+    @Test
+    fun `world directory as direct input preserves world-level misc files`() {
+        val fs = MemoryFS()
+
+        // Simulate 26.1+ world directory passed directly as input
+        val input = Paths.get("/mem/my-world")
+        fs.createDirectories(input)
+
+        // World-level files (these were being lost before the fix)
+        fs.write(input.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("players"))
+        fs.write(input.resolve("players").resolve("p.dat"), "player".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("data"))
+        fs.write(input.resolve("data").resolve("info.dat"), "info".toByteArray(Charsets.UTF_8))
+        fs.createDirectories(input.resolve("datapacks"))
+        fs.write(input.resolve("datapacks").resolve("pack.mcmeta"), "{}".toByteArray(Charsets.UTF_8))
+
+        // Nested dimensions — create intermediate dirs explicitly (MemoryFS limitation)
+        val dimsDir = input.resolve("dimensions")
+        val nsDir = dimsDir.resolve("minecraft")
+        fs.createDirectories(dimsDir)
+        fs.createDirectories(nsDir)
+        val overworld = nsDir.resolve("overworld")
+        fs.createDirectories(overworld)
+        fs.createDirectories(overworld.resolve("region"))
+        fs.write(
+            overworld.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.createDirectories(overworld.resolve("data"))
+        fs.write(
+            overworld.resolve("data").resolve("dim_meta.dat"),
+            "dim-meta".toByteArray(Charsets.UTF_8),
+        )
+
+        val output = Paths.get("/mem/world-as-input-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0)
+        assertTrue(report.errors.isEmpty(), "no errors expected, got: ${report.errors}")
+
+        // World-level misc files must be preserved
+        assertTrue(
+            fs.exists(output.resolve("level.dat")),
+            "world-level level.dat should be copied when world is direct input",
+        )
+        assertTrue(
+            fs.exists(output.resolve("players/p.dat")),
+            "world-level players/ should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("data/info.dat")),
+            "world-level data/ should be copied",
+        )
+        assertTrue(
+            fs.exists(output.resolve("datapacks/pack.mcmeta")),
+            "world-level datapacks/ should be copied",
+        )
+
+        // Dimension-level misc files should also be preserved
+        assertTrue(
+            fs.exists(output.resolve("dimensions/minecraft/overworld/data/dim_meta.dat")),
+            "dimension-level data should be copied",
+        )
+    }
 }

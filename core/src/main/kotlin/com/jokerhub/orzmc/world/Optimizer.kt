@@ -101,6 +101,14 @@ object DefaultOptimizer : OptimizerEngine {
                 parent = parent.parent
             }
         }
+        // When input itself is not a dimension but directly contains misc files
+        // (e.g., the world directory passed directly in a 26.1+ nested layout),
+        // include it so world-level files (level.dat, players/, data/, etc.)
+        // are copied. Detect this by checking for a dimensions/ subdirectory
+        // (definitive marker of a 26.1+ world root) without a region/ directory.
+        if (!isDimensionDir(fs, input) && fs.isDirectory(input.resolve("dimensions"))) {
+            parents.add(input)
+        }
         return parents.toList()
     }
 
