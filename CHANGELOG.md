@@ -15,6 +15,12 @@
 - 修复 ktlint 14.2.0 新增的代码风格检查（链式调用换行、参数格式等）
 - 修复 detekt 2.x 配置属性名称变更（threshold → allowedLines/allowedComplexity 等）
 - 移除 detekt JDK ≤ 21 的 skip 逻辑，detekt 2.x 原生支持 JDK 25
+- 修复当世界目录直接作为输入时（如 `~/Downloads/world`），`discoverMiscParents` 遗漏 input 自身导致
+  world 级别杂项文件（`level.dat`、`data/`、`datapacks/` 等）未被复制的问题
+
+### Testing
+- 新增 `Paper26StructureTest` 3 个回归测试：深层嵌套中间目录、world 直接输入 + copyMisc=false、
+  空 dimensions 目录的杂项文件保留
 
 ## v0.1.0 (2025-06-17)
 

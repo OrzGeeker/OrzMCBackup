@@ -58,7 +58,13 @@ Minecraft Java 版世界优化工具，双用途：
 - **兼容 Minecraft 26.1+** 的 `dimensions/minecraft/<dim>/` 嵌套结构
 - 也兼容传统平面布局（`<world>/region/`）
 
-### 3.2 强制加载区块解析（`ForceLoad` + `NbtForceLoader`）
+### 3.2 杂项父目录发现（`DefaultOptimizer.discoverMiscParents`）
+
+- 从每个维度的父目录链向上遍历，收集非维度目录作为杂项源
+- 当输入目录本身不是维度但包含 `dimensions/` 子目录时（26.1+ 直接传入世界目录的场景），将 input 也加入杂项源
+- 确保 world 级别的 `level.dat`、`players/`、`data/`、`datapacks/` 等文件在 `--copy-misc` 时正确复制
+
+### 3.3 强制加载区块解析（`ForceLoad` + `NbtForceLoader`）
 
 两级探测（按优先级）：
 1. **`data/minecraft/chunk_tickets.dat`**（26.1+ 新版格式）
@@ -72,7 +78,7 @@ Minecraft Java 版世界优化工具，双用途：
 - 安全限制：`maxArraySize=10MB`、`maxListLength=65536`、`maxCompoundDepth=64`
 - 解析失败不中断处理（除非 strict 模式）
 
-### 3.3 区块总数统计（`McaUtils.countTotalChunks`）
+### 3.4 区块总数统计（`McaUtils.countTotalChunks`）
 
 - 遍历所有维度的所有 `.mca` 文件
 - 校验文件大小 >= 8192 字节（至少一个完整头部）
@@ -145,8 +151,18 @@ Minecraft Java 版世界优化工具，双用途：
 
 ### 6.2 杂项文件复制（Copy Misc）
 
-- 复制维度目录下除 `region/`、`entities/`、`poi/` 外的所有文件和目录
-- 通过 `OutputOptions.copyMisc` 开关控制
+杂项文件来源来自 **两个渠道**（`miscSources = tasks + miscParents`）：
+1. **维度目录**（`tasks`）：每个维度的 `region/`、`entities/`、`poi/` 以外的文件
+2. **杂项父目录**（`miscParents`，由 `discoverMiscParents` 发现）：非维度的中间目录，用于保留 world 级别的配置文件
+
+**复制规则**：
+- 遍历每个源的目录树，排除 `region/`、`entities/`、`poi/` 顶层子目录
+- 通过 `dimSet`（所有维度路径的集合）排除已作为维度处理的路径，避免重复
+- 通过 `OutputOptions.copyMisc` 开关控制（默认 `true`）
+
+**26.1+ 世界目录直接输入场景**：
+- 例如输入 `~/Downloads/world`（而非 `~/Downloads`），world 目录本身会被 `discoverMiscParents` 加入
+  杂项源，从而正确复制 `level.dat`、`players/`、`data/`、`datapacks/`、`generated/` 等 world 级别文件
 
 ### 6.3 ZIP 打包
 
@@ -368,6 +384,8 @@ Minecraft Java 版世界优化工具，双用途：
 | `MainCliCopyMiscWindowsTest` | CLI | Windows 杂项复制 |
 | `MainCliReportTest` | CLI | 报告生成 |
 | `MainCliStrictExitCodeTest` | CLI | 严格模式退出码 |
+| `Paper26StructureTest` | 功能 | Paper 26.1+ 世界目录结构（18 个测试） |
+| `FixtureCompatibilityTest` | 功能 | 真实 MCA 夹具兼容性 |
 
 ### 12.3 辅助工具
 

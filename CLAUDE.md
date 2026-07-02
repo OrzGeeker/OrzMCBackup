@@ -97,7 +97,7 @@ CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
 4. **可扩展性：** `parallelism` 控制维度级线程池。`DimensionProcessor` 也支持区域级并行。
 5. **快速 InhabitedTime 检查：** 使用字节级扫描查找 NBT 标签，而非完整的 NBT 反序列化。
 6. **惰性 MCA 写入：** 仅当至少有一个区块被保留时才创建输出 writer，避免写入空 MCA 文件。
-7. **26.1+ 世界格式兼容：** ForceLoad 按优先级探测 `chunk_tickets.dat` → `chunks.dat`；维度发现递归支持 `dimensions/` 嵌套结构。
+7. **26.1+ 世界格式兼容：** ForceLoad 按优先级探测 `chunk_tickets.dat` → `chunks.dat`；维度发现递归支持 `dimensions/` 嵌套结构；`discoverMiscParents` 自动发现非维度祖先目录，确保 world 级别杂项文件（`level.dat`、`data/`、`players/` 等）在直接传入世界目录时也能正确复制。
 
 ### 测试
 
@@ -105,6 +105,8 @@ CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
 - `McaMemoryBuilder`（testFixtures）通过编程方式构建合成 MCA 数据
 - 真实 MCA 夹具文件位于 `core/src/test/resources/Fixtures/`
 - `TestPaths` 工具定位基于磁盘测试的夹具目录
+- **`Paper26StructureTest`**（18 个测试）覆盖 26.1+ 世界目录结构的各种场景：嵌套维度、旧版平面布局、inPlace、dryRun、copyMisc、自定义命名空间、深层嵌套、world 目录直接输入等
+- `FixtureCompatibilityTest` 基于真实 MCA 夹具验证新旧格式兼容性
 - CI 矩阵：Java 17/21/25 × Ubuntu/macOS/Windows
 - Lint/Coverage：JDK 25
 - 通过 Kover 生成覆盖率报告（`.github/workflows/test-matrix.yml`）
