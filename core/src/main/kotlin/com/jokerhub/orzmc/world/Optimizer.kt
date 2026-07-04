@@ -3,6 +3,7 @@ package com.jokerhub.orzmc.world
 import com.jokerhub.orzmc.patterns.InhabitedTimePattern
 import com.jokerhub.orzmc.patterns.ListPattern
 import java.io.IOException
+import java.nio.file.FileSystems
 import java.nio.file.Path
 
 enum class ProgressMode { Off, Global, Region }
@@ -456,7 +457,8 @@ object DefaultOptimizer : OptimizerEngine {
             // server on Windows, causing spurious warning logs.
             // Examples: "session.lock", "*.lock", "*.tmp"
             val skipGlobs = setOf("session.lock")
-            val matchers = skipGlobs.map { java.nio.file.FileSystems.getDefault().getPathMatcher("glob:$it") }
+            val fsDefault = FileSystems.getDefault()
+            val matchers = skipGlobs.map { fsDefault.getPathMatcher("glob:$it") }
             for (p in ctx.fs.walk(dir)) {
                 if (p == dir) continue
                 if (excludePaths.any { it != dir && p.startsWith(it) }) continue

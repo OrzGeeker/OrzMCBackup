@@ -160,7 +160,7 @@ class Paper26StructureTest {
         assertTrue(fs.exists(output.resolve("world/players/player1.dat")), "players should be copied")
         assertTrue(fs.exists(output.resolve("world/data/scores.dat")), "data should be copied")
         assertTrue(fs.exists(output.resolve("world/datapacks/custom.zip")), "datapacks should be copied")
-        assertFalse(fs.exists(output.resolve("world/session.lock")), "session.lock should be skipped (runtime lock file)")
+        assertFalse(fs.exists(output.resolve("world/session.lock")), "session.lock should be skipped")
 
         // Verify dimension data files are copied
         assertTrue(
