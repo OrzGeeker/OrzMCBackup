@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.6 (2026-07-04)
+
+### Fixed
+- 修复 Windows 上 `session.lock` 被服务端进程锁定导致 `CopyMisc` 复制失败报 WARN 的问题
+  - `skipGlobs` 支持 glob 通配符（如 `session.lock`、`*.lock`），默认跳过 `session.lock`
+  - 避免运行时锁文件在备份中产生无意义的错误日志
+
+### Testing
+- 新增 glob 模式匹配测试：验证 `session.lock` 被跳过，其他 `.lock` 文件仍正常复制
+- 更新现有测试断言以反映 `session.lock` 不再被复制
+
 ## v0.1.5 (2026-07-02)
 
 ### Changed
