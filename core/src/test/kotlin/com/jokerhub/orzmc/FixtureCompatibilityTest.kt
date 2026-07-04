@@ -132,9 +132,9 @@ class FixtureCompatibilityTest {
             Files.exists(out.resolve("world/data/chunks.dat")),
             "world root data/ should be in output",
         )
-        assertTrue(
+        assertFalse(
             Files.exists(out.resolve("world/session.lock")),
-            "world root session.lock should be in output",
+            "world root session.lock should be skipped (runtime lock file)",
         )
         assertTrue(
             Files.exists(out.resolve("world/level.dat_old")),

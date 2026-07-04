@@ -38,6 +38,50 @@ import java.nio.file.Paths
  */
 class Paper26StructureTest {
     @Test
+    fun `glob skip patterns in copyMisc skip session lock but copy other lock files`() {
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/test-skip-globs")
+        fs.createDirectories(input)
+
+        // Flat world with various lock files
+        fs.write(input.resolve("session.lock"), "lock".toByteArray(Charsets.UTF_8))
+        fs.write(input.resolve("other.lock"), "other-lock".toByteArray(Charsets.UTF_8))
+        fs.write(input.resolve("data.lock"), "data-lock".toByteArray(Charsets.UTF_8))
+        fs.write(input.resolve("level.dat"), "level-data".toByteArray(Charsets.UTF_8))
+        fs.write(input.resolve("readme.txt"), "readme".toByteArray(Charsets.UTF_8))
+
+        // Dimension region files
+        fs.createDirectories(input.resolve("region"))
+        fs.write(
+            input.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+
+        // Run backup
+        val output = Paths.get("/mem/test-skip-globs-out")
+        val request =
+            OptimizerRequest(
+                input = input,
+                output = output,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                outputOptions = OutputOptions(zipOutput = false, force = true),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+        assertTrue(report.processedChunks > 0, "should process chunks")
+        assertTrue(report.errors.isEmpty(), "no errors expected")
+
+        // session.lock matches the glob "session.lock" → skipped
+        assertFalse(fs.exists(output.resolve("session.lock")), "session.lock should be skipped")
+        // other .lock files do NOT match the glob pattern → still copied
+        assertTrue(fs.exists(output.resolve("other.lock")), "other.lock should be copied (no glob match)")
+        assertTrue(fs.exists(output.resolve("data.lock")), "data.lock should be copied (no glob match)")
+        // Non-lock files are always copied
+        assertTrue(fs.exists(output.resolve("level.dat")), "level.dat should be copied")
+        assertTrue(fs.exists(output.resolve("readme.txt")), "readme.txt should be copied")
+    }
+
+    @Test
     fun `nested dimensions with root-level misc files are fully backed up`() {
         val fs = MemoryFS()
         val input = Paths.get("/mem/paper26-server")
@@ -116,7 +160,7 @@ class Paper26StructureTest {
         assertTrue(fs.exists(output.resolve("world/players/player1.dat")), "players should be copied")
         assertTrue(fs.exists(output.resolve("world/data/scores.dat")), "data should be copied")
         assertTrue(fs.exists(output.resolve("world/datapacks/custom.zip")), "datapacks should be copied")
-        assertTrue(fs.exists(output.resolve("world/session.lock")), "session.lock should be copied")
+        assertFalse(fs.exists(output.resolve("world/session.lock")), "session.lock should be skipped (runtime lock file)")
 
         // Verify dimension data files are copied
         assertTrue(

@@ -451,11 +451,19 @@ object DefaultOptimizer : OptimizerEngine {
             val outDir = ctx.out.resolve(rel)
             ctx.fs.createDirectories(outDir)
             val reserved = setOf("region", "entities", "poi")
+            // Glob patterns for runtime/temporary files to skip during misc copy.
+            // These are meaningless in a backup and may be locked by a running
+            // server on Windows, causing spurious warning logs.
+            // Examples: "session.lock", "*.lock", "*.tmp"
+            val skipGlobs = setOf("session.lock")
+            val matchers = skipGlobs.map { java.nio.file.FileSystems.getDefault().getPathMatcher("glob:$it") }
             for (p in ctx.fs.walk(dir)) {
                 if (p == dir) continue
                 if (excludePaths.any { it != dir && p.startsWith(it) }) continue
                 val relPath = dir.relativize(p)
                 if (relPath.toString().isEmpty()) continue
+                val fileName = relPath.nameCount.let { if (it > 0) relPath.getName(it - 1).toString() else "" }
+                if (matchers.any { it.matches(Path.of(fileName)) }) continue
                 val top = if (relPath.nameCount > 0) relPath.getName(0).toString() else ""
                 if (reserved.contains(top)) continue
                 val target = outDir.resolve(relPath)
