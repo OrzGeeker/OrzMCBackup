@@ -40,7 +40,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run unit tests
         run: ./gradlew :core:test :app:test --no-daemon -Pversion=${{ env.VERSION }}
       - name: Build app shadowJar
