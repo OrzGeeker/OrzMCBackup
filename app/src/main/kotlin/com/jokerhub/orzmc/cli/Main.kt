@@ -109,6 +109,10 @@ class Main : Callable<Int> {
         names = ["--copy-misc"],
         description = ["Copy non-region/entities/poi files and folders in each dimension"],
         defaultValue = "true",
+        // Without an explicit fallbackValue, picocli 4.7 resolves the bare
+        // `--copy-misc` form of a negatable boolean option to `false`,
+        // silently inverting the flag. Pin it to true.
+        fallbackValue = "true",
         negatable = true,
     )
     var copyMisc: Boolean = true

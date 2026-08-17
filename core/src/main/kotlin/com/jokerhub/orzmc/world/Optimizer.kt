@@ -5,6 +5,7 @@ import com.jokerhub.orzmc.patterns.ListPattern
 import java.io.IOException
 import java.nio.file.FileSystems
 import java.nio.file.Path
+import java.nio.file.PathMatcher
 
 enum class ProgressMode { Off, Global, Region }
 
@@ -194,7 +195,7 @@ object DefaultOptimizer : OptimizerEngine {
                 handleInPlaceReplacement(fs, tasks, input, out)
             } else {
                 if (request.outputOptions.copyMisc) {
-                    copyMiscFiles(ctx, miscSources, miscTotal, request, dimSet)
+                    copyMiscFiles(ctx, miscSources, request, dimSet)
                 }
                 if (request.outputOptions.zipOutput) {
                     handleZipOutput(ctx, miscTotal)
@@ -255,7 +256,6 @@ object DefaultOptimizer : OptimizerEngine {
         return output
     }
 
-    @Suppress("LoopWithTooManyJumpStatements")
     private fun countMiscFiles(
         fs: FileSystem,
         sources: List<Path>,
@@ -265,14 +265,10 @@ object DefaultOptimizer : OptimizerEngine {
         if (request.outputOptions.inPlace || !request.outputOptions.copyMisc) return 0L
         var c = 0L
         val reserved = setOf("region", "entities", "poi")
+        val matchers = skipMatchers()
         sources.forEach { dir ->
             for (p in fs.walk(dir)) {
-                if (p == dir) continue
-                if (excludePaths.any { it != dir && p.startsWith(it) }) continue
-                val rel = dir.relativize(p)
-                if (rel.toString().isEmpty()) continue
-                val top = if (rel.nameCount > 0) rel.getName(0).toString() else ""
-                if (reserved.contains(top)) continue
+                if (miscRel(dir, p, excludePaths, reserved, matchers) == null) continue
                 c += 1
             }
         }
@@ -424,7 +420,6 @@ object DefaultOptimizer : OptimizerEngine {
     private fun copyMiscFiles(
         ctx: DimensionContext,
         sources: List<Path>,
-        miscTotal: Long,
         request: OptimizerRequest,
         excludePaths: Set<Path> = emptySet(),
     ) {
@@ -447,27 +442,14 @@ object DefaultOptimizer : OptimizerEngine {
                 ctx.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progressTotal, p, null)
             }
         }
+        val reserved = setOf("region", "entities", "poi")
+        val matchers = skipMatchers()
         sources.forEach { dir ->
             val rel = ctx.input.relativize(dir)
             val outDir = ctx.out.resolve(rel)
             ctx.fs.createDirectories(outDir)
-            val reserved = setOf("region", "entities", "poi")
-            // Glob patterns for runtime/temporary files to skip during misc copy.
-            // These are meaningless in a backup and may be locked by a running
-            // server on Windows, causing spurious warning logs.
-            // Examples: "session.lock", "*.lock", "*.tmp"
-            val skipGlobs = setOf("session.lock")
-            val fsDefault = FileSystems.getDefault()
-            val matchers = skipGlobs.map { fsDefault.getPathMatcher("glob:$it") }
             for (p in ctx.fs.walk(dir)) {
-                if (p == dir) continue
-                if (excludePaths.any { it != dir && p.startsWith(it) }) continue
-                val relPath = dir.relativize(p)
-                if (relPath.toString().isEmpty()) continue
-                val fileName = relPath.nameCount.let { if (it > 0) relPath.getName(it - 1).toString() else "" }
-                if (matchers.any { it.matches(Path.of(fileName)) }) continue
-                val top = if (relPath.nameCount > 0) relPath.getName(0).toString() else ""
-                if (reserved.contains(top)) continue
+                val relPath = miscRel(dir, p, excludePaths, reserved, matchers) ?: continue
                 val target = outDir.resolve(relPath)
                 if (ctx.fs.isDirectory(p)) {
                     ctx.fs.createDirectories(target)
@@ -526,4 +508,39 @@ object DefaultOptimizer : OptimizerEngine {
         builder.block()
         return run(builder.build())
     }
+}
+
+/**
+ * Decides whether a walked misc-file path [p] under [dir] is a real misc file
+ * that must be counted/copied, or something to skip. Returns the path relative
+ * to [dir] when the entry is included, or `null` when it must be skipped.
+ *
+ * Skips:
+ * - the walk root itself and entries outside [excludePaths]
+ * - files matching [matchers] (glob on the bare file name, e.g. `session.lock`)
+ * - top-level `.mca` files directly inside `region`/`entities`/`poi` (`rel.nameCount == 2`),
+ *   which the dimension processor rewrites; nested `.mca` and non-`.mca` files
+ *   (e.g. `.bak`/`.backup`) in those subtrees are misc and must be kept.
+ */
+private fun miscRel(
+    dir: Path,
+    p: Path,
+    excludePaths: Set<Path>,
+    reserved: Set<String>,
+    matchers: List<PathMatcher>,
+): Path? {
+    if (p == dir) return null
+    if (excludePaths.any { it != dir && p.startsWith(it) }) return null
+    val rel = dir.relativize(p)
+    if (rel.toString().isEmpty()) return null
+    val fileName = rel.nameCount.let { if (it > 0) rel.getName(it - 1).toString() else "" }
+    if (matchers.any { it.matches(Path.of(fileName)) }) return null
+    val top = if (rel.nameCount > 0) rel.getName(0).toString() else ""
+    if (reserved.contains(top) && rel.nameCount == 2 && rel.toString().endsWith(".mca")) return null
+    return rel
+}
+
+private fun skipMatchers(): List<PathMatcher> {
+    val fsDefault = FileSystems.getDefault()
+    return setOf("session.lock").map { fsDefault.getPathMatcher("glob:$it") }
 }
