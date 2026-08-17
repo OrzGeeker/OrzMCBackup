@@ -78,6 +78,12 @@ object DefaultMerger : MergeEngine {
             progressSink.emit(ProgressEvent(stage, cur, total, path?.toString(), msg))
         }
 
+        // Guard against aliasing before any write: an overlapping base/patch/output could
+        // wipe or corrupt the source worlds (e.g. output == base with --force).
+        if (overlaps(base, out) || overlaps(patch, out) || overlaps(base, patch)) {
+            record(base, ERR_INPUT, "base, patch and output must be three distinct, non-overlapping directories")
+            return MergeReport(errors = errors)
+        }
         if (!fs.isDirectory(base) || !fs.isDirectory(patch)) {
             record(base, ERR_INPUT, "base/patch must be existing directories")
             return MergeReport(errors = errors)
@@ -105,7 +111,7 @@ object DefaultMerger : MergeEngine {
 
         val lock = outDir.resolve("session.lock")
         if (fs.exists(lock)) fs.deleteIfExists(lock)
-        emit(ProgressStage.Done, counters.done(), 0, outDir, "merge complete")
+        emit(ProgressStage.Done, counters.mergedRegions.get(), 0, outDir, "merge complete")
         val report =
             MergeReport(
                 mergedRegions = counters.mergedRegions.get(),
@@ -148,6 +154,15 @@ object DefaultMerger : MergeEngine {
             return null
         }
         return out
+    }
+
+    private fun overlaps(
+        a: Path,
+        b: Path,
+    ): Boolean {
+        val na = a.toAbsolutePath().normalize()
+        val nb = b.toAbsolutePath().normalize()
+        return na == nb || na.startsWith(nb) || nb.startsWith(na)
     }
 
     private fun copyTree(
@@ -194,11 +209,15 @@ object DefaultMerger : MergeEngine {
         emit: (ProgressStage, Long?, Long?, Path?, String?) -> Unit,
     ) {
         val reserved = setOf("region", "entities", "poi")
-        val total = fs.walk(patch).count { it != patch && fs.isRegularFile(it) }.toLong()
+        val total =
+            fs
+                .walk(patch)
+                .count { it != patch && fs.isRegularFile(it) && it.fileName.toString() != "session.lock" }
+                .toLong()
         var done = 0L
         emit(ProgressStage.CopyMisc, done, total, patch, "overlaying patch")
         for (p in fs.walk(patch)) {
-            if (p == patch || !fs.isRegularFile(p)) continue
+            if (p == patch || !fs.isRegularFile(p) || p.fileName.toString() == "session.lock") continue
             val rel = patch.relativize(p)
             val kind = if (rel.nameCount >= 2) rel.parent.fileName.toString() else null
             val isMcaUnderReserved = kind in reserved && rel.fileName.toString().endsWith(".mca")
@@ -208,34 +227,24 @@ object DefaultMerger : MergeEngine {
                     val baseFile = base.resolve(rel)
                     val outFile = out.resolve(rel)
                     if (fs.isRegularFile(baseFile)) {
-                        mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record)
+                        try {
+                            mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record)
+                        } catch (e: Exception) {
+                            record(p, ERR_MCA, "Failed to merge region file: ${e.message}")
+                        }
                     } else {
                         // Patch-only region: copy the region plus its entities/poi siblings.
+                        // rel is region/<name> in the flat layout or dimensions/.../region/<name>
+                        // in the nested layout; the parent of "region" is the dimension dir.
                         copyFile(fs, p, outFile, counters, record, copied = true)
-                        val dimRel = rel.parent.parent
-                        if (dimRel != null) {
-                            val entRel = dimRel.resolve("entities").resolve(name)
-                            val poiRel = dimRel.resolve("poi").resolve(name)
-                            if (fs.isRegularFile(patch.resolve(entRel))) {
-                                copyFile(
-                                    fs,
-                                    patch.resolve(entRel),
-                                    out.resolve(entRel),
-                                    counters,
-                                    record,
-                                    copied = true,
-                                )
-                            }
-                            if (fs.isRegularFile(patch.resolve(poiRel))) {
-                                copyFile(
-                                    fs,
-                                    patch.resolve(poiRel),
-                                    out.resolve(poiRel),
-                                    counters,
-                                    record,
-                                    copied = true,
-                                )
-                            }
+                        val dimDir = rel.parent.parent ?: Path.of("")
+                        val entRel = dimDir.resolve("entities").resolve(name)
+                        val poiRel = dimDir.resolve("poi").resolve(name)
+                        if (fs.isRegularFile(patch.resolve(entRel))) {
+                            copyFile(fs, patch.resolve(entRel), out.resolve(entRel), counters, record, copied = true)
+                        }
+                        if (fs.isRegularFile(patch.resolve(poiRel))) {
+                            copyFile(fs, patch.resolve(poiRel), out.resolve(poiRel), counters, record, copied = true)
                         }
                     }
                 }
@@ -284,16 +293,38 @@ object DefaultMerger : MergeEngine {
         val outEntities = outDim.resolve("entities").resolve(name)
         val outPoi = outDim.resolve("poi").resolve(name)
 
-        val crb = openReader(fs, ioFactory, baseRegion, record, ERR_MCA)
-        val crp = openReader(fs, ioFactory, patchRegion, record, ERR_MCA)
-        if (crb == null || crp == null) {
-            crb?.close()
-            crp?.close()
+        // base may lack an entities/poi directory entirely (base had no such files);
+        // create the output parents so the lazy writers can place siblings there.
+        try {
+            fs.createDirectories(outRegion.parent ?: outDim)
+            fs.createDirectories(outEntities.parent ?: outDim)
+            fs.createDirectories(outPoi.parent ?: outDim)
+        } catch (e: Exception) {
+            record(outRegion, ERR_WRITE, "Failed to create output directories: ${e.message}")
             return
         }
-        val erb = openReader(fs, ioFactory, baseDim.resolve("entities").resolve(name), record, ERR_ENTITIES)
+
+        val crb = openReader(fs, ioFactory, baseRegion, record, ERR_MCA)
+        val crp = openReader(fs, ioFactory, patchRegion, record, ERR_MCA)
+        // Patch region must be readable; if the base region is corrupt, treat base as empty
+        // and keep every valid patch chunk instead of dropping the whole file.
+        if (crp == null) {
+            crb?.close()
+            return
+        }
+        val erb =
+            if (crb != null) {
+                openReader(fs, ioFactory, baseDim.resolve("entities").resolve(name), record, ERR_ENTITIES)
+            } else {
+                null
+            }
         val erp = openReader(fs, ioFactory, patchDim.resolve("entities").resolve(name), record, ERR_ENTITIES)
-        val prb = openReader(fs, ioFactory, baseDim.resolve("poi").resolve(name), record, ERR_POI)
+        val prb =
+            if (crb != null) {
+                openReader(fs, ioFactory, baseDim.resolve("poi").resolve(name), record, ERR_POI)
+            } else {
+                null
+            }
         val prp = openReader(fs, ioFactory, patchDim.resolve("poi").resolve(name), record, ERR_POI)
 
         val ew = WriterHolder()
@@ -302,7 +333,7 @@ object DefaultMerger : MergeEngine {
         try {
             for (i in 0 until 1024) {
                 val pe = crp.get(i)
-                val be = crb.get(i)
+                val be = if (crb != null) crb.get(i) else null
                 when {
                     pe != null -> {
                         cw = cw ?: ioFactory.createWriter(fs, outRegion)
@@ -399,13 +430,4 @@ private class MergeCounters {
     val linkedEntities = AtomicLong(0)
     val linkedPoi = AtomicLong(0)
     val overlayFiles = AtomicLong(0)
-
-    fun done(): Long =
-        mergedRegions.get() +
-            copiedFiles.get() +
-            overlayFiles.get() +
-            patchSlots.get() +
-            baseSlots.get() +
-            linkedEntities.get() +
-            linkedPoi.get()
 }

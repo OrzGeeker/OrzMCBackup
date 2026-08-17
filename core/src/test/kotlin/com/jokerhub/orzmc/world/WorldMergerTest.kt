@@ -92,6 +92,29 @@ class WorldMergerTest {
     private fun mca(vararg slots: Pair<Int, Long>): ByteArray =
         McaMemoryBuilder.buildMca(slots.map { (i, v) -> MemChunk(i, v, CompressionKind.RAW) })
 
+    /** Writes an MCA file in the legacy flat layout: <world>/<kind>/<name>. */
+    private fun writeFlatMca(
+        world: Path,
+        kind: String,
+        name: String,
+        bytes: ByteArray,
+    ) {
+        fs.createDirectories(world)
+        val target = world.resolve(kind).resolve(name)
+        fs.createDirectories(target.parent!!)
+        fs.write(target, bytes)
+    }
+
+    private fun entryCountAt(
+        world: Path,
+        kind: String,
+        name: String,
+    ): Int {
+        val path = world.resolve(kind).resolve(name)
+        if (!fs.isRegularFile(path)) return 0
+        return io.openReader(fs, path).use { it.entries().size }
+    }
+
     @Test
     fun `overlays patch chunks and fills pruned slots from base`() {
         writeMca(base, "region", "r.0.0.mca", mca(0 to 900, 1 to 100, 2 to 500))
@@ -253,6 +276,121 @@ class WorldMergerTest {
             fs.read(out.resolve(dim).resolve("entities").resolve("r.0.0.mca")),
             "stale entities file must be removed",
         )
+    }
+
+    @Test
+    fun `base aliasing output is rejected`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = patch,
+                    output = base,
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Input", report.errors[0].kind)
+        assertEquals(900, readInhabited(base, "region", "r.0.0.mca", 0), "base must be left untouched")
+    }
+
+    @Test
+    fun `output nested inside base is rejected`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = patch,
+                    output = base.resolve("sub").resolve("out"),
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Input", report.errors[0].kind)
+    }
+
+    @Test
+    fun `base aliasing patch is rejected`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = base,
+                    output = out,
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Input", report.errors[0].kind)
+    }
+
+    @Test
+    fun `corrupt base region keeps every valid patch chunk`() {
+        writeMca(base, "region", "r.0.0.mca", byteArrayOf(1, 2, 3, 4))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000, 2 to 600))
+
+        val report = runMerge()
+
+        assertEquals(0, report.errors.size)
+        assertEquals(2, report.patchSlots)
+        assertEquals(0, report.baseSlots)
+        assertEquals(2, entryCount(out, "region", "r.0.0.mca"))
+        assertEquals(1000, readInhabited(out, "region", "r.0.0.mca", 0))
+        assertEquals(600, readInhabited(out, "region", "r.0.0.mca", 2))
+    }
+
+    @Test
+    fun `entities file is written when base has no entities directory`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        writeMca(patch, "entities", "r.0.0.mca", mca(0 to 1))
+
+        val report = runMerge()
+
+        assertEquals(0, report.errors.size)
+        assertEquals(1, entryCount(out, "entities", "r.0.0.mca"))
+        assertEquals(1, readInhabited(out, "entities", "r.0.0.mca", 0))
+    }
+
+    @Test
+    fun `nested and root session locks in patch are not overlaid`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        fs.write(patch.resolve("session.lock"), ByteArray(0))
+        val nestedLock = patch.resolve(dim).resolve("session.lock")
+        fs.createDirectories(nestedLock.parent!!)
+        fs.write(nestedLock, ByteArray(0))
+
+        runMerge()
+
+        assertNull(fs.read(out.resolve("session.lock")), "root session.lock must not be overlaid")
+        assertNull(fs.read(out.resolve(dim).resolve("session.lock")), "nested session.lock must not be overlaid")
+    }
+
+    @Test
+    fun `flat layout patch-only region copies entities and poi siblings`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        writeFlatMca(patch, "region", "r.2.2.mca", mca(0 to 1000))
+        writeFlatMca(patch, "entities", "r.2.2.mca", mca(0 to 1))
+        writeFlatMca(patch, "poi", "r.2.2.mca", mca(0 to 2))
+
+        runMerge()
+
+        assertEquals(1, entryCountAt(out, "region", "r.2.2.mca"))
+        assertEquals(1, entryCountAt(out, "entities", "r.2.2.mca"))
+        assertEquals(1, entryCountAt(out, "poi", "r.2.2.mca"))
     }
 
     @Test

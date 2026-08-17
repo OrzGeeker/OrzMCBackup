@@ -29,7 +29,7 @@ data class OptimizeReport(
 
 /** Serializes [OptimizeReport] to JSON, CSV, or plain text formats. */
 object ReportIO {
-    private fun esc(s: String): String {
+    internal fun esc(s: String): String {
         val out = StringBuilder(s.length + 16)
         for (c in s) {
             when (c) {

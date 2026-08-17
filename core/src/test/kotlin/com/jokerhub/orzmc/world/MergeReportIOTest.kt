@@ -52,4 +52,67 @@ class MergeReportIOTest {
         assertEquals(50, o.removedChunks)
         assertEquals(listOf(err), o.errors)
     }
+
+    @Test
+    fun `toJson emits real merge counts and escaped errors`() {
+        val r =
+            MergeReport(
+                mergedRegions = 3,
+                copiedFiles = 7,
+                patchSlots = 233021,
+                baseSlots = 463657,
+                linkedEntities = 98384,
+                linkedPoi = 10022,
+                overlayFiles = 7353,
+                errors = listOf(OptimizeError("a\"b", "MCA", "line1\nline2")),
+            )
+        val json = MergeReportIO.toJson(r)
+        assertTrue(json.contains("\"mergedRegions\":3"))
+        assertTrue(json.contains("\"copiedFiles\":7"))
+        assertTrue(json.contains("\"patchSlots\":233021"))
+        assertTrue(json.contains("\"baseSlots\":463657"))
+        assertTrue(json.contains("\"linkedEntities\":98384"))
+        assertTrue(json.contains("\"linkedPoi\":10022"))
+        assertTrue(json.contains("\"overlayFiles\":7353"))
+        assertTrue(json.contains("\"path\":\"a\\\"b\""))
+        assertTrue(json.contains("\"message\":\"line1\\nline2\""))
+    }
+
+    @Test
+    fun `toCsv writes stats header and error table`() {
+        val r =
+            MergeReport(
+                mergedRegions = 2,
+                copiedFiles = 1,
+                patchSlots = 100,
+                baseSlots = 50,
+                errors = listOf(OptimizeError("x", "y", "z")),
+            )
+        val csv = MergeReportIO.toCsv(r)
+        assertTrue(
+            csv.startsWith(
+                "mergedRegions,copiedFiles,patchSlots,baseSlots,linkedEntities,linkedPoi,overlayFiles,errorsCount\n" +
+                    "2,1,100,50,0,0,0,1",
+            ),
+        )
+        assertTrue(csv.contains("\"x\",\"y\",\"z\""))
+    }
+
+    @Test
+    fun `write persists report to file`() {
+        val r = MergeReport(mergedRegions = 1)
+        val tmp =
+            java.nio.file.Files
+                .createTempFile("merge-report-", ".json")
+        try {
+            MergeReportIO.write(r, tmp, "json")
+            val text =
+                java.nio.file.Files
+                    .readString(tmp)
+            assertTrue(text.contains("\"mergedRegions\":1"))
+        } finally {
+            java.nio.file.Files
+                .deleteIfExists(tmp)
+        }
+    }
 }

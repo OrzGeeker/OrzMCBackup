@@ -91,12 +91,15 @@ class MergeCommand : Callable<Int> {
                     outputOptions = OutputOptions(force = force, copyMisc = true),
                     progress = ProgressOptions(interval = progressInterval, sink = progressSink),
                     runtime = RuntimeOptions(parallelism = 1),
-                    hooks = Hooks(reportSink = reportFile?.let { FileReportSink(it, reportFormat) }),
+                    hooks = Hooks(),
                     io = IOOptions(),
                 )
             val r = WorldMerger.run(request)
             if (report) logger.info(MergeReportIO.toText(r))
-            reportFile?.let { path -> logger.info("报告已写入：$path") }
+            reportFile?.let { path ->
+                MergeReportIO.write(r, path, reportFormat)
+                logger.info("报告已写入：$path")
+            }
             if (r.errors.isNotEmpty()) 1 else 0
         } catch (e: OptimizeException) {
             logger.error(e.message ?: "发生错误")
