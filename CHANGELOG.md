@@ -13,6 +13,17 @@
   08-15 优化备份）的槽位级合并典型场景案例，含背景数据、Anvil region 格式与合并算法知识点、
   处理方法、统计对齐/槽位并集复核/跨实现逐字节比对三重验收方法与实测结果。
 
+### CI
+- `test-matrix.yml` 覆盖率任务同时生成并上传 `:app` 模块的 kover 报告，使 CLI 代码纳入 CodeCov
+  diff 覆盖率统计（此前仅上传 `:core`，app 新代码在 patch 中一律按 0% 计入）。
+
+### Testing
+- 新增 `MergeReportIOTest`（core）：覆盖 `toText` 统计/错误列表两种形态与 `toOptimizeReport` 映射。
+- `WorldMergerTest` 新增分支覆盖：输入非目录、非空输出无 `--force` 拒绝、`--force` 清空重跑、
+  patch-only region 复制 entities/poi 兄弟、陈旧 entities 文件删除、`reportSink` 回调。
+- 新增 `MainCliMergeTest`（app）：真实临时目录端到端跑 `merge` CLI，验证槽位并集、杂项覆盖、
+  `session.lock` 移除与非空输出拒绝。
+
 ### Fixed
 - 修复 `--copy-misc` 在 picocli 4.7 `negatable = true` 下开关反转：裸写 `--copy-misc` 被解析为
   `false`（杂项文件全部不备份），`--no-copy-misc` 反而生效。增加 `fallbackValue = "true"` 修正。

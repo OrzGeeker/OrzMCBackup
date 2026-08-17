@@ -74,6 +74,21 @@ class WorldMergerTest {
             ),
         )
 
+    private fun runMergeWith(
+        force: Boolean = false,
+        reportSink: ReportSink? = null,
+    ): MergeReport =
+        WorldMerger.run(
+            MergeRequest(
+                base = base,
+                patch = patch,
+                output = out,
+                outputOptions = OutputOptions(force = force, copyMisc = true),
+                hooks = Hooks(reportSink = reportSink),
+                io = IOOptions(fs = fs, ioFactory = io),
+            ),
+        )
+
     private fun mca(vararg slots: Pair<Int, Long>): ByteArray =
         McaMemoryBuilder.buildMca(slots.map { (i, v) -> MemChunk(i, v, CompressionKind.RAW) })
 
@@ -148,6 +163,116 @@ class WorldMergerTest {
 
         assertArrayEquals("NEW".toByteArray(), fs.read(out.resolve("level.dat")))
         assertEquals(null, fs.read(out.resolve("session.lock")), "session.lock must not be present in output")
+    }
+
+    @Test
+    fun `non-directory base or patch reports input error`() {
+        fs.createDirectories(base)
+        fs.createDirectories(patch)
+        fs.write(patch.resolve("not-a-dir"), ByteArray(1))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = patch.resolve("not-a-dir"),
+                    output = out,
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Input", report.errors[0].kind)
+    }
+
+    @Test
+    fun `non-empty output without force is rejected`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        fs.createDirectories(out)
+        fs.write(out.resolve("keep.txt"), "x".toByteArray())
+
+        val report = runMerge()
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Output", report.errors[0].kind)
+        assertArrayEquals("x".toByteArray(), fs.read(out.resolve("keep.txt"))!!)
+    }
+
+    @Test
+    fun `force wipes non-empty output before merging`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        fs.createDirectories(out)
+        fs.write(out.resolve("keep.txt"), "x".toByteArray())
+
+        val report = runMergeWith(force = true)
+
+        assertEquals(0, report.errors.size)
+        assertNull(fs.read(out.resolve("keep.txt")), "stale output content must be wiped")
+        assertEquals(1000, readInhabited(out, "region", "r.0.0.mca", 0))
+    }
+
+    @Test
+    fun `patch-only region copies its region entities and poi siblings`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.2.2.mca", mca(0 to 1000))
+        writeMca(patch, "entities", "r.2.2.mca", mca(0 to 1))
+        writeMca(patch, "poi", "r.2.2.mca", mca(0 to 2))
+
+        runMerge()
+
+        assertEquals(1, entryCount(out, "region", "r.2.2.mca"))
+        assertEquals(1, entryCount(out, "entities", "r.2.2.mca"))
+        assertEquals(1, entryCount(out, "poi", "r.2.2.mca"))
+    }
+
+    @Test
+    fun `patch-only region without entity or poi siblings copies region alone`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.3.3.mca", mca(0 to 1000))
+
+        runMerge()
+
+        assertEquals(1, entryCount(out, "region", "r.3.3.mca"))
+        assertNull(fs.read(out.resolve(dim).resolve("entities").resolve("r.3.3.mca")))
+        assertNull(fs.read(out.resolve(dim).resolve("poi").resolve("r.3.3.mca")))
+    }
+
+    @Test
+    fun `stale base entities file is dropped when lockstep produces no entities`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(base, "entities", "r.0.0.mca", mca(0 to 1))
+        // patch keeps the same slot but has no entities file -> the copied base entities
+        // must be removed, not left pointing at old 08-12 entities.
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+
+        runMerge()
+
+        assertNull(
+            fs.read(out.resolve(dim).resolve("entities").resolve("r.0.0.mca")),
+            "stale entities file must be removed",
+        )
+    }
+
+    @Test
+    fun `report sink receives the merge report`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        val received = mutableListOf<OptimizeReport>()
+
+        runMergeWith(
+            reportSink =
+                object : ReportSink {
+                    override fun write(report: OptimizeReport) {
+                        received.add(report)
+                    }
+                },
+        )
+
+        assertEquals(1, received.size)
+        assertEquals(1, received[0].processedChunks)
+        assertEquals(0, received[0].removedChunks)
     }
 
     private fun readInhabited(

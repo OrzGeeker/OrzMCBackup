@@ -114,20 +114,24 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests with coverage
-        run: ./gradlew :core:koverXmlReport --no-daemon
+        run: ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
       - name: Verify coverage threshold
         run: ./gradlew :core:koverVerify --no-daemon
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: core/build/reports/kover/
+          path: |
+            core/build/reports/kover/
+            app/build/reports/kover/
       - name: Upload to CodeCov
         # Skip on dependabot runs where CODECOV_TOKEN is not available.
         if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v7
         with:
-          directory: core/build/reports/kover/
+          files: |
+            core/build/reports/kover/report.xml
+            app/build/reports/kover/report.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: OrzMC/OrzMCBackup
           fail_ci_if_error: true
