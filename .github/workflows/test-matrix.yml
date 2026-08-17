@@ -17,7 +17,7 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run ktlint check
         run: ./gradlew ktlintCheck --no-daemon
       - name: Run detekt
@@ -36,7 +36,7 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on ${{ matrix.java }}
         run: ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
@@ -61,7 +61,7 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on Windows Java ${{ matrix.java }}
         shell: pwsh
         run: .\gradlew.bat :core:test :app:test --no-daemon
@@ -87,7 +87,7 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on macOS Java ${{ matrix.java }}
         run: ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
@@ -112,7 +112,7 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests with coverage
         run: ./gradlew :core:koverXmlReport --no-daemon
       - name: Verify coverage threshold
