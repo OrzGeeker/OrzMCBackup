@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.4.10"
-shadow = "9.4.3"
+shadow = "9.6.1"
 kover = "0.9.9"
 ktlint = "14.2.0"
 detekt = "2.0.0-alpha.6"
