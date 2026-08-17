@@ -42,6 +42,13 @@ class MergeCommand : Callable<Int> {
     lateinit var progressMode: ProgressMode
 
     @Option(
+        names = ["--parallelism"],
+        description = ["Parallel region merge threads (1 = sequential)"],
+        defaultValue = "1",
+    )
+    var parallelism: Int = 1
+
+    @Option(
         names = ["--progress-interval"],
         description = ["Progress callback interval (files)"],
         defaultValue = "1000",
@@ -90,7 +97,7 @@ class MergeCommand : Callable<Int> {
                     output = output,
                     outputOptions = OutputOptions(force = force, copyMisc = true),
                     progress = ProgressOptions(interval = progressInterval, sink = progressSink),
-                    runtime = RuntimeOptions(parallelism = 1),
+                    runtime = RuntimeOptions(parallelism = parallelism),
                     hooks = Hooks(),
                     io = IOOptions(),
                 )

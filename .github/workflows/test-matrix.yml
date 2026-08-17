@@ -116,7 +116,7 @@ jobs:
       - name: Run tests with coverage
         run: ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
       - name: Verify coverage threshold
-        run: ./gradlew :core:koverVerify --no-daemon
+        run: ./gradlew :core:koverVerify :app:koverVerify --no-daemon
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:

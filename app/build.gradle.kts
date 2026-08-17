@@ -50,6 +50,21 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// Threshold set to ~50% to stay safely below the measured 57% instruction
+// coverage while still blocking meaningful regressions (Main.kt dispatch drags
+// the aggregate down).
+kover {
+    reports {
+        verify {
+            rule {
+                bound {
+                    minValue = 50
+                }
+            }
+        }
+    }
+}
+
 tasks.withType<Jar>().named("shadowJar") {
     archiveBaseName.set("backup")
     archiveClassifier.set("")

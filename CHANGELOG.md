@@ -1,28 +1,55 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 (2026-08-17)
 
 ### Added
 - 新增 `merge` 子命令：以 chunk 槽位粒度合并"优化备份 + 更早全量备份"，恢复"全量最新"地图。
   对每个同时存在于 base/patch 的 region 文件逐槽位取源（patch 优先、base 填充、entities/poi 锁步），
   防止同名文件覆盖导致的地图空洞/地形回退。核心实现在 `WorldMerger.kt`，CLI 入口 `MergeCommand.kt`，
   报告序列化 `MergeReportIO.kt`。
+- `WorldMerger.run(MergeRequest)` 作为公开库 API 供直接复用；`MergeReportIO.write` 提供无损
+  JSON/CSV 落盘（区别于 `Hooks.reportSink` 经 `toOptimizeReport` 的有损映射）。
+
+### Performance
+- `copyTree` 阶段跳过 patch 也存在的 `region/entities/poi/*.mca` 的 base→out 冗余复制（overlay
+  阶段会用合并结果重写这些文件）；损坏 patch region 时经 `copyBaseIfPresent` 回退复制 base 对应
+  文件，保证任何情形下不丢数据。
+- `merge` 支持 `--parallelism N` 并行合并 region 文件（默认 1 保持旧行为；各 region 独立写文件，
+  输出逐字节确定，已用真实数据与顺序模式交叉验证一致）。真实数据（1,244 个共同 region）实测：
+  顺序 20m21s → `--parallelism 4` 16m30s（-19%，瓶颈在同盘 IO 争用）。
 
 ### Docs
 - 新增 `docs/papermc-map-backup-recovery-case.md`：基于真实 PaperMC 26.2 世界（08-12 全量备份 +
   08-15 优化备份）的槽位级合并典型场景案例，含背景数据、Anvil region 格式与合并算法知识点、
-  处理方法、统计对齐/槽位并集复核/跨实现逐字节比对三重验收方法与实测结果。
+  处理方法、统计对齐/槽位并集复核/跨实现逐字节比对三重验收方法与实测结果。补充目录互斥校验
+  （alias guard）与损坏 patch 回退说明、`linkedEntities`/`linkedPoi` 指标。
+- 新增 `docs/real-world-backup-validation.md`：基于真实 PaperMC 26.1+ 世界（`E:\test\world`，
+  29,046 文件 / 14.3 GB）的备份验证报告，含磁盘占用前后对比、丢失文件分类、两处缺陷与两轮
+  代码审查记录，以及 1/2/3/4/5 分钟 InhabitedTime 阈值优化效果对比。
+- `README.md` / `docs/FEATURES.md` 全量对齐：新增 merge 库用法示例（Kotlin+Java）、merge 功能
+  小节、`--parallelism` 参数说明，修正版本号（Gradle 9.7.0 / Kotlin 2.4.10 / Shadow 9.6.1 /
+  JUnit 6.1.3）与覆盖率门槛描述。
 
 ### CI
 - `test-matrix.yml` 覆盖率任务同时生成并上传 `:app` 模块的 kover 报告，使 CLI 代码纳入 CodeCov
   diff 覆盖率统计（此前仅上传 `:core`，app 新代码在 patch 中一律按 0% 计入）。
+- 新增 `:app:koverVerify` 门槛（覆盖率 ≥ 50%），coverage 任务改为 `:core:koverVerify
+  :app:koverVerify`。
 
 ### Testing
-- 新增 `MergeReportIOTest`（core）：覆盖 `toText` 统计/错误列表两种形态与 `toOptimizeReport` 映射。
-- `WorldMergerTest` 新增分支覆盖：输入非目录、非空输出无 `--force` 拒绝、`--force` 清空重跑、
-  patch-only region 复制 entities/poi 兄弟、陈旧 entities 文件删除、`reportSink` 回调。
+- 新增 `MergeReportIOTest`（core）：覆盖 `toText` 统计/错误列表两种形态、`toOptimizeReport` 映射、
+  CSV 写出与父目录自动创建。
+- `WorldMergerTest` 新增分支覆盖：目录重叠（patch 嵌套在 out 内）拒绝、损坏 patch region 回退
+  base、输出目录不可写、copy/write/finalize 失败容错（FailingFileSystem/注入故障 ioFactory）、
+  reader 打开异常跳过、进度边界（Init/Done 恰好一次）、standalone patch entities/poi 忽略、
+  并行（`parallelism=2`）与顺序槽位一致。
 - 新增 `MainCliMergeTest`（app）：真实临时目录端到端跑 `merge` CLI，验证槽位并集、杂项覆盖、
-  `session.lock` 移除与非空输出拒绝。
+  `session.lock` 移除、非空输出拒绝、JSON/CSV 报告文件、`--progress-mode Global` 与缺失输入目录
+  非零退出码。
+- 新增 `MainDispatchTest`（app）：`Main.dispatch` 对 `merge`/backup/无参的退出码分发。
+- 新增 `RealMcaMergeTest`（core）+ 提交真实 Anvil 格式夹具对 `Fixtures/merge/`（`tools/gen_merge_fixtures.py`
+  生成，README 记录重生成命令）：走生产 `RealFileSystem`+`DefaultMcaIOFactory` 验证槽位合并、
+  entities/poi 锁步、base-only region 保留与 level.dat 覆盖。
 
 ### Fixed
 - 修复 `--copy-misc` 在 picocli 4.7 `negatable = true` 下开关反转：裸写 `--copy-misc` 被解析为
@@ -33,18 +60,11 @@
 - 重构杂项跳过逻辑为共享辅助函数 `miscRel`/`skipMatchers`，修复 `countMiscFiles` 与
   `copyMiscFiles` 对 `session.lock` 计数不一致导致的进度总数虚高；移除 `copyMiscFiles` 未使用的
   `miscTotal` 参数。
-
-### Testing
 - 新增 `RealWorldPatternTest`（MemoryFS）：region/entities/poi 内非 `.mca` 保留、零字节 `level*.dat`
   保留、根级/维度级 `death-chests.yml` 保留、全剔除 region 文件消失（惰性写入器）。
 - `MainCliCopyMiscTest` 新增裸 `--copy-misc` 启用杂项复制回归测试。
 - 磁盘夹具 `Fixtures/world-26-1` 扩展（`region/r.0.0.mca.bak`、零字节 `level<数字>.dat`、
   `death-chests.yml`），`FixtureCompatibilityTest` 新增对应存在性断言。
-
-### Docs
-- 新增 `docs/real-world-backup-validation.md`：基于真实 PaperMC 26.1+ 世界（`E:\test\world`，
-  29,046 文件 / 14.3 GB）的备份验证报告，含磁盘占用前后对比、丢失文件分类、两处缺陷与两轮
-  代码审查记录，以及 1/2/3/4/5 分钟 InhabitedTime 阈值优化效果对比。
 
 ## v0.1.6 (2026-07-04)
 

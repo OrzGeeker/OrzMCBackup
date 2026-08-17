@@ -115,4 +115,57 @@ class MergeReportIOTest {
                 .deleteIfExists(tmp)
         }
     }
+
+    @Test
+    fun `write persists csv report to file`() {
+        val r =
+            MergeReport(
+                mergedRegions = 2,
+                copiedFiles = 1,
+                patchSlots = 100,
+                baseSlots = 50,
+                errors = listOf(OptimizeError("x", "y", "z")),
+            )
+        val tmp =
+            java.nio.file.Files
+                .createTempFile("merge-report-", ".csv")
+        try {
+            MergeReportIO.write(r, tmp, "csv")
+            val text =
+                java.nio.file.Files
+                    .readString(tmp)
+            val header =
+                "mergedRegions,copiedFiles,patchSlots,baseSlots,linkedEntities," +
+                    "linkedPoi,overlayFiles,errorsCount\n"
+            assertTrue(text.startsWith(header))
+            assertTrue(text.startsWith(header + "2,1,100,50,0,0,0,1"))
+            assertTrue(text.contains("\"x\",\"y\",\"z\""))
+        } finally {
+            java.nio.file.Files
+                .deleteIfExists(tmp)
+        }
+    }
+
+    @Test
+    fun `write creates missing parent directories`() {
+        val r = MergeReport(mergedRegions = 1)
+        val root =
+            java.nio.file.Files
+                .createTempDirectory("merge-parent-")
+        val target = root.resolve("sub").resolve("deep").resolve("report.json")
+        try {
+            MergeReportIO.write(r, target, "json")
+            assertTrue(
+                java.nio.file.Files
+                    .exists(target),
+            )
+            assertTrue(
+                java.nio.file.Files
+                    .readString(target)
+                    .contains("\"mergedRegions\":1"),
+            )
+        } finally {
+            Cleaner.deleteTreeWithRetry(root, 5, 10)
+        }
+    }
 }

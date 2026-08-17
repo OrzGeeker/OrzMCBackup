@@ -18,11 +18,11 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
 3. 运行示例：
   ```bash
   # 指定输入与输出目录
-  java -jar app/build/libs/backup-0.1.0.jar /path/to/world /path/to/out -t 600 --zip-output
+  java -jar app/build/libs/backup-0.2.0.jar /path/to/world /path/to/out -t 600 --zip-output
   # 原地处理（覆盖输入目录）
-  java -jar app/build/libs/backup-0.1.0.jar /path/to/world --in-place --progress-mode global
+  java -jar app/build/libs/backup-0.2.0.jar /path/to/world --in-place --progress-mode global
   # 写入报告文件（JSON 或 CSV）
-  java -jar app/build/libs/backup-0.1.0.jar /path/to/world /path/to/out -t 0 --report-file /tmp/report.json --report-format json
+  java -jar app/build/libs/backup-0.2.0.jar /path/to/world /path/to/out -t 0 --report-file /tmp/report.json --report-format json
   ```
 
 ### CLI 参数
@@ -63,8 +63,11 @@ merge 子命令参数：
 - BASE / PATCH / OUTPUT：三个位置参数（全量备份 / 优化备份 / 输出目录）
 - -f, --force：覆盖已存在且非空的输出目录（无交互）
 - --progress-mode / --progress-interval：进度选项（同 backup）
+- --parallelism：并行合并 region 文件的线程数（默认 1，即顺序执行；>1 时各 region 独立写文件，输出仍逐字节确定）
 - --report：在标准输出打印合并统计与错误列表
 - --report-file / --report-format：报告写入文件（json | csv）
+
+作为库使用时，可用 `WorldMerger.run(MergeRequest)` 直接复用同一合并算法（见下文"作为库使用"）。
 
 详细背景、算法与验收方法见 [docs/papermc-map-backup-recovery-case.md](docs/papermc-map-backup-recovery-case.md)。
 
@@ -222,6 +225,57 @@ public class JavaReportSinkAuto {
 }
 ```
 
+### merge 复用（WorldMerger）
+`WorldMerger.run(MergeRequest)` 与 `MergeCommand` 使用完全相同的槽位级合并算法，可在代码中直接复用：
+```kotlin
+import com.jokerhub.orzmc.world.*
+import java.nio.file.Paths
+
+fun mergeWorlds() {
+    val report =
+        WorldMerger.run(
+            MergeRequest(
+                base = Paths.get("/path/to/full-backup"),
+                patch = Paths.get("/path/to/optimized-backup"),
+                output = Paths.get("/path/to/recovered"),
+                outputOptions = OutputOptions(force = true),
+                runtime = RuntimeOptions(parallelism = 4),
+            ),
+        )
+    MergeReportIO.write(report, Paths.get("/path/to/merge-report.json"), "json")
+    println(MergeReportIO.toText(report))
+}
+```
+
+Java 用法：
+```java
+import com.jokerhub.orzmc.world.*;
+import java.nio.file.Paths;
+
+public class MergeExample {
+    public static void main(String[] args) {
+        MergeRequest request = new MergeRequest(
+            Paths.get("/path/to/full-backup"),
+            Paths.get("/path/to/optimized-backup"),
+            Paths.get("/path/to/recovered"),
+            new OutputOptions(false, false, true, true, false), // force = true
+            new ProgressOptions(1000L, 0L, new CallbackProgressSink(e -> System.out.println(e))),
+            new RuntimeOptions(4),
+            new Hooks(null, null, null),
+            new IOOptions(RealFileSystem.INSTANCE, new DefaultMcaIOFactory())
+        );
+        MergeReport report = WorldMerger.run(request);
+        MergeReportIO.write(report, Paths.get("/path/to/merge-report.json"), "json");
+        System.out.println(MergeReportIO.toText(report));
+    }
+}
+```
+
+**merge 与 optimize 的 reportSink 差异**：`Hooks.reportSink` 的类型是 `ReportSink`，合并时 `WorldMerger` 通过
+`MergeReportIO.toOptimizeReport` 映射为 `OptimizeReport` 后写入——该映射是**有损**的（`processedChunks`/`removedChunks`
+实为 patch/base 槽位计数）。需要无损的完整 `MergeReport`（含 `linkedEntities`/`linkedPoi`/`overlayFiles`）时，
+直接用 `MergeReportIO.write(report, path, format)` 写 JSON/CSV。
+
 ### 迁移旧版 OptimizerConfig 到新 DSL
 - input/output → Optimizer.run(input, output) 或 OptimizerRequest(input/output)
 - inhabitedThresholdSeconds → inhabitedThresholdSeconds 或 filter.inhabitedThresholdSeconds
@@ -255,13 +309,15 @@ public class JavaReportSinkAuto {
 
 ## 测试
 ```bash
-./gradlew :core:test --no-daemon
+./gradlew :core:test :app:test --no-daemon   # 单元 + 集成测试
+./gradlew :core:koverVerify :app:koverVerify # 覆盖率门槛（core ≥75%、app ≥50%）
+./gradlew ktlintCheck detekt                 # 静态检查
 ```
 
-- 测试数据：建议将 Fixtures 目录纳入版本控制（位置：core/src/test/resources/Fixtures），示例文件：
+- 测试数据：Fixtures 目录纳入版本控制（位置：core/src/test/resources/Fixtures），示例文件：
     - Fixtures/world/region/r.0.0.mca
     - Fixtures/world/data/chunks.dat
-    - （可选）entities/poi 同名 MCA 文件
+    - Fixtures/merge/base/ 与 Fixtures/merge/patch/：真实 Anvil 格式合并夹具对（`RealMcaMergeTest` 使用，可用 `python tools/gen_merge_fixtures.py` 重新生成）
 
 ## 支持的压缩格式与 Minecraft 版本
 
@@ -282,15 +338,17 @@ public class JavaReportSinkAuto {
 OrzMCBackup/
 ├─ app/                       # CLI 模块
 │  ├─ build.gradle.kts
-│  └─ src/main/kotlin/com/jokerhub/orzmc/cli/Main.kt
+│  └─ src/main/kotlin/com/jokerhub/orzmc/cli/
+│     ├─ Main.kt               # backup 命令 + 子命令分发（dispatch）
+│     └─ MergeCommand.kt       # merge 子命令
 ├─ core/                      # 核心库模块
 │  ├─ build.gradle.kts
 │  └─ src/
 │     ├─ main/kotlin/com/jokerhub/orzmc/
 │     │  ├─ mca/Reader/Writer/Entry
 │     │  ├─ patterns/ChunkPattern/InhabitedTime/List
-│     │  └─ world/Optimizer/NbtForceLoader
-│     └─ test/resources/Fixtures/   # 建议提交的测试样本
+│     │  └─ world/Optimizer/WorldMerger/MergeReportIO/NbtForceLoader
+│     └─ test/resources/Fixtures/   # 提交的测试样本（含 merge/ 真实 .mca 夹具对）
 ├─ .github/workflows/         # CI 工作流
 │  ├─ test-matrix.yml         # 测试矩阵（Java 17/21/25 × 3 平台）
 │  ├─ release-lib.yml         # 发布库到 Maven Central
@@ -305,13 +363,13 @@ OrzMCBackup/
 ```
 
 ## 构建环境与配置
-- Gradle Wrapper：**9.6.1**（Kotlin 2.4.0 / Shadow 9.4.3 兼容）
+- Gradle Wrapper：**9.7.0**（Kotlin 2.4.10 / Shadow 9.6.1 兼容）
 - Wrapper 配置位置：[gradle/wrapper/gradle-wrapper.properties](gradle/wrapper/gradle-wrapper.properties)
 - Wrapper 缓存：使用 GRADLE_USER_HOME（用户主目录）
-- 插件版本与仓源统一在根项目声明：[build.gradle.kts](build.gradle.kts)
+- 插件版本与仓源统一在根项目声明：[gradle/libs.versions.toml](gradle/libs.versions.toml)
 
 - 所有模块的 group 与 version 由根项目统一注入（支持 CI 通过 -Pversion 传入）
-- **JDK 要求**：Java 17+（JUnit 6.1.1 最低要求）
+- **JDK 要求**：Java 17+（JUnit 6.1.3 最低要求）
 - CI 测试矩阵：Java 17 / 21 / 25 × ubuntu / macos / windows
 - CI lint/coverage：JDK 25
 

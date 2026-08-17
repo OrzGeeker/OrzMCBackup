@@ -119,4 +119,119 @@ class MainCliMergeTest {
             Cleaner.deleteTreeWithRetry(base, 5, 10)
         }
     }
+
+    @Test
+    fun `merge writes json report file`() {
+        val base = Files.createTempDirectory("merge-base-")
+        val patch = Files.createTempDirectory("merge-patch-")
+        val out = Files.createTempDirectory("merge-out-")
+        val report = Files.createTempDirectory("merge-rep-").resolve("report.json")
+        try {
+            writeMca(base, "region", "r.0.0.mca", listOf(0))
+            writeMca(patch, "region", "r.0.0.mca", listOf(1))
+
+            val exit = runMerge(base, patch, out, "--report-file", report.toString())
+
+            assertEquals(0, exit)
+            assertTrue(Files.exists(report), "report file should exist")
+            val text = Files.readString(report)
+            assertTrue(text.contains("\"mergedRegions\":1"))
+            assertTrue(text.contains("\"patchSlots\":1"))
+        } finally {
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(base, 5, 10)
+            Files.deleteIfExists(report)
+        }
+    }
+
+    @Test
+    fun `merge writes csv report file`() {
+        val base = Files.createTempDirectory("merge-base-")
+        val patch = Files.createTempDirectory("merge-patch-")
+        val out = Files.createTempDirectory("merge-out-")
+        val report = Files.createTempDirectory("merge-rep-").resolve("report.csv")
+        try {
+            writeMca(base, "region", "r.0.0.mca", listOf(0))
+            writeMca(patch, "region", "r.0.0.mca", listOf(1))
+
+            val exit =
+                runMerge(
+                    base,
+                    patch,
+                    out,
+                    "--report-file",
+                    report.toString(),
+                    "--report-format",
+                    "csv",
+                )
+
+            assertEquals(0, exit)
+            assertTrue(Files.exists(report), "report file should exist")
+            val text = Files.readString(report)
+            assertTrue(
+                text.startsWith("mergedRegions,copiedFiles,patchSlots,baseSlots,linkedEntities,linkedPoi,"),
+            )
+            assertTrue(text.contains("\n1,0,1,1,0,0"))
+        } finally {
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(base, 5, 10)
+            Files.deleteIfExists(report)
+        }
+    }
+
+    @Test
+    fun `merge supports global progress mode`() {
+        val base = Files.createTempDirectory("merge-base-")
+        val patch = Files.createTempDirectory("merge-patch-")
+        val out = Files.createTempDirectory("merge-out-")
+        try {
+            writeMca(base, "region", "r.0.0.mca", listOf(0))
+            writeMca(patch, "region", "r.0.0.mca", listOf(1))
+
+            val exit =
+                CommandLine(MergeCommand()).execute(
+                    base.toString(),
+                    patch.toString(),
+                    out.toString(),
+                    "--force",
+                    "--progress-mode",
+                    "Global",
+                )
+
+            assertEquals(0, exit)
+            assertTrue(Files.exists(out.resolve(dim).resolve("region").resolve("r.0.0.mca")))
+        } finally {
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(base, 5, 10)
+        }
+    }
+
+    @Test
+    fun `merge missing base directory exits non-zero`() {
+        val patch = Files.createTempDirectory("merge-patch-")
+        val out = Files.createTempDirectory("merge-out-")
+        val missingBase = Files.createTempDirectory("merge-missing-").resolve("world")
+        try {
+            writeMca(patch, "region", "r.0.0.mca", listOf(1))
+
+            val exit =
+                CommandLine(MergeCommand()).execute(
+                    missingBase.toString(),
+                    patch.toString(),
+                    out.toString(),
+                    "--force",
+                    "--progress-mode",
+                    "Off",
+                )
+
+            assertEquals(1, exit)
+        } finally {
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(missingBase.parent, 5, 10)
+        }
+    }
 }

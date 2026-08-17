@@ -1,6 +1,6 @@
 # OrzMCBackup 功能点梳理
 
-> 基于 v0.1.0 代码库，2025-06 版
+> 基于 v0.2.0 代码库，2026-08 版
 
 ## 一、项目定位
 
@@ -181,7 +181,52 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 七、MCA 文件格式库（`mca/` 包）
+## 七、merge 槽位级合并（v0.2.0）
+
+### 7.1 场景与算法
+
+当仅剩"优化备份（按 InhabitedTime 裁剪过）+ 更早全量备份"两份数据时，用 `merge` 以 **chunk 槽位粒度**合并，恢复"全量最新"地图，避免同名文件覆盖导致的地图空洞/地形回退。
+
+```
+槽位来源 = patch 有该槽 ? patch（更新） : base 有该槽 ? base : 空
+```
+
+- **patch 优先、base 填空槽**；entities/poi 与 region **锁步**（槽位来源为 patch → 取 patch 的 entities/poi 该槽，来源为 base → 取 base 对应槽），绝不能直接复制 base 的 entities/poi。
+- 合并后全空的 entities/poi 文件**不生成**；仅 base 存在的 region → 原样复制 base（含其 entities/poi）；仅 patch 存在 → 复制 patch region + 同名 entities/poi 兄弟文件。
+- 杂项文件（`level.dat` 等）按 patch（更新版）覆盖。
+
+### 7.2 CLI 参数（`merge BASE PATCH OUTPUT`）
+
+| 参数 | 默认 | 功能 |
+|------|------|------|
+| `-f`/`--force` | false | 覆盖非空输出目录 |
+| `--progress-mode` | Off | Off/Global/Region |
+| `--parallelism` | 1 | 并行合并 region 文件的线程数（>1 时逐 region 独立写文件，输出仍确定） |
+| `--progress-interval` | 1000 | 进度回调间隔（文件数） |
+| `--report` | false | 打印合并统计与错误 |
+| `--report-file` / `--report-format` | null / json | 报告写文件（json/csv） |
+
+### 7.3 库 API（`WorldMerger` / `MergeReport` / `MergeReportIO`）
+
+- 入口：`WorldMerger.run(MergeRequest)` → `MergeReport`；`MergeReportIO.write(report, path, format)` 落盘 JSON/CSV。
+- `MergeReport` 字段语义：
+  - `mergedRegions`：base/patch 共有、做了槽位级合并的 region 数
+  - `copiedFiles` / `overlayFiles`：patch 独有的 region 文件 / 覆盖的杂项文件数
+  - `patchSlots` / `baseSlots`：取自 patch 与 base 的槽位数
+  - `linkedEntities` / `linkedPoi`：锁步写入的 entities/poi 条目数
+  - `errors`：非致命错误（`OptimizeError`）列表
+- **性能**：`copyTree` 阶段跳过 patch 也存在的 `region/entities/poi/*.mca` 的 base→out 冗余复制（overlay 阶段会用合并结果重写）；损坏 patch region 时回退复制 base 对应文件，保证不丢数据。
+- **有损告诫**：`Hooks.reportSink` 会把 `MergeReport` 经 `MergeReportIO.toOptimizeReport` 映射为 `OptimizeReport`（`processedChunks`/`removedChunks` 实为 patch/base 槽位计数），需完整字段时直接用 `MergeReportIO.write`。
+
+### 7.4 安全性
+
+- base/patch/output 三目录**互不重叠**校验（任一重叠即拒绝）。
+- 输入非目录、输出不可写、非空输出未加 `--force` 均记录错误并返回非 0 退出码。
+- 逐 region 独立写文件，并行（`--parallelism > 1`）不改变输出字节。
+
+---
+
+## 八、MCA 文件格式库（`mca/` 包）
 
 ### 7.1 随机访问抽象（`RandomAccess`）
 
@@ -232,7 +277,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 八、进度与报告
+## 九、进度与报告
 
 ### 8.1 进度报告（`ProgressSink` + `ProgressEvent`）
 
@@ -273,7 +318,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 九、文件系统抽象（`FileSystem`）
+## 十、文件系统抽象（`FileSystem`）
 
 ### 9.1 接口方法（15 个）
 
@@ -291,7 +336,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 十、错误处理体系（`Errors.kt`）
+## 十一、错误处理体系（`Errors.kt`）
 
 自定义异常层次（全部继承自 `OptimizeException` → `RuntimeException`）：
 
@@ -311,7 +356,10 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 十一、CLI 入口（`Main.kt`）
+## 十二、CLI 入口（`Main.kt`）
+
+`Main.dispatch(args)` 将首参为 `merge` 的参数路由到 `MergeCommand`（merge 子命令，见第七节），其余走 backup 主命令；
+`main()` 仅对非 0 退出码调用 `System.exit`，`dispatch` 本身可被测试直接调用。
 
 ### 11.1 参数体系
 
@@ -348,7 +396,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 十二、测试体系
+## 十三、测试体系
 
 ### 12.1 测试核心策略
 
@@ -386,6 +434,11 @@ Minecraft Java 版世界优化工具，双用途：
 | `MainCliStrictExitCodeTest` | CLI | 严格模式退出码 |
 | `Paper26StructureTest` | 功能 | Paper 26.1+ 世界目录结构（18 个测试） |
 | `FixtureCompatibilityTest` | 功能 | 真实 MCA 夹具兼容性 |
+| `WorldMergerTest` | 单元 | merge 槽位级合并（含损坏 patch 回退、copy/write 失败、并行一致性、进度边界等） |
+| `MergeReportIOTest` | 单元 | MergeReport JSON/CSV/Text 序列化、父目录自动创建 |
+| `RealMcaMergeTest` | 集成 | 用提交的真实 Anvil 夹具对走生产 `RealFileSystem`+`DefaultMcaIOFactory` 全链路合并 |
+| `MainCliMergeTest` | CLI | merge 子命令 JSON/CSV 报告、进度模式、错误退出码 |
+| `MainDispatchTest` | CLI | `Main.dispatch` 子命令分发（merge/backup/无参）退出码 |
 
 ### 12.3 辅助工具
 
@@ -397,35 +450,35 @@ Minecraft Java 版世界优化工具，双用途：
 
 ---
 
-## 十三、CI/CD 流水线
+## 十四、CI/CD 流水线
 
 | 工作流 | 触发条件 | 内容 |
 |--------|----------|------|
-| `test-matrix.yml` | push / PR | 3 JDK × 3 OS 矩阵测试 + Kover 覆盖率（lint/coverage 使用 JDK 25） |
+| `test-matrix.yml` | push / PR | 3 JDK × 3 OS 矩阵测试 + Kover 覆盖率门槛（`:core:koverVerify :app:koverVerify`，lint/coverage 使用 JDK 25） |
 | `release-lib.yml` | tag `v*` / manual | 签名并发布库到 Maven Central Portal |
 | `release-app.yml` | tag / manual | 构建 Shadow JAR + GitHub Release |
 | `dependabot.yml` | 每日 | 自动检查依赖更新 |
 
 ---
 
-## 十四、构建配置
+## 十五、构建配置
 
 | 模块 | 特性 |
 |------|------|
-| 根项目 | Kotlin 2.4.0、Gradle 9.6.1、JDK 17-29 校验 |
-| `core` | 库发布、签名、Dokka（Javadoc JAR）、test-fixtures |
-| `app` | Shadow JAR（fat JAR）、picocli CLI |
+| 根项目 | Kotlin 2.4.10、Gradle 9.7.0、JDK 17-29 校验 |
+| `core` | 库发布、签名、Dokka（Javadoc JAR）、test-fixtures、kover 门槛 75% |
+| `app` | Shadow JAR（fat JAR）、picocli CLI、kover 门槛 50% |
 
 ### 依赖
 
 - **核心运行时**：Kotlin stdlib、`org.lz4:lz4-java:1.8.0`
 - **并发**：`kotlinx-coroutines-core:1.11.0`
 - **CLI**：`info.picocli:picocli:4.7.7`
-- **测试**：JUnit Jupiter 6.1.1 + Platform Launcher
+- **测试**：JUnit Jupiter 6.1.3 + Platform Launcher
 
 ---
 
-## 十五、关键架构决策总结
+## 十六、关键架构决策总结
 
 1. **抽象可测试性**：`FileSystem` + `McaIOFactory` 双抽象层，全管道可在内存测试
 2. **惰性 MCA 写入**：仅在有保留区块时创建 writer，避免空文件

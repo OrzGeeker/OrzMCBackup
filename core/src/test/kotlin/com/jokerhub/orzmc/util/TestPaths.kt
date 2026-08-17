@@ -30,6 +30,12 @@ object TestPaths {
 
     fun worldRegion(name: String): Path = world().resolve("region").resolve(name)
 
+    private val mergePath: Path = fixturesRoot.resolve("merge")
+
+    fun mergeBase(): Path = mergePath.resolve("base")
+
+    fun mergePatch(): Path = mergePath.resolve("patch")
+
     /** Path to the Minecraft 26.1+ format fixture world root. */
     @Suppress("ktlint:standard:function-naming")
     fun world26_1(): Path = world26_1Path

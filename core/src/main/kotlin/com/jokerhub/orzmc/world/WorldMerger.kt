@@ -49,6 +49,7 @@ object DefaultMerger : MergeEngine {
     private const val ERR_POI = "Poi"
     private const val ERR_WRITE = "Write"
     private const val ERR_COPY = "Copy"
+    private val RESERVED_KINDS = setOf("region", "entities", "poi")
 
     override fun run(request: MergeRequest): MergeReport {
         val fs = request.io.fs
@@ -80,7 +81,7 @@ object DefaultMerger : MergeEngine {
 
         // Guard against aliasing before any write: an overlapping base/patch/output could
         // wipe or corrupt the source worlds (e.g. output == base with --force).
-        if (overlaps(base, out) || overlaps(patch, out) || overlaps(base, patch)) {
+        if (overlaps(fs, base, out) || overlaps(fs, patch, out) || overlaps(fs, base, patch)) {
             record(base, ERR_INPUT, "base, patch and output must be three distinct, non-overlapping directories")
             return MergeReport(errors = errors)
         }
@@ -93,7 +94,32 @@ object DefaultMerger : MergeEngine {
         emit(ProgressStage.Init, 0, 0, base, "starting merge")
 
         // 1. Copy the full backup to the output, so every chunk from the base is preserved.
-        copyTree(fs, base, outDir, { p, k, m -> record(p, k, m) })
+        //    Skip base .mca files under region/entities/poi that the patch also has, since
+        //    the overlay phase rewrites them anyway (avoids a wasted intermediate copy).
+        val patchMcaRels = HashSet<Path>()
+        val patchRegionRels = HashSet<Path>()
+        for (p in fs.walk(patch)) {
+            if (p == patch || !fs.isRegularFile(p) || p.fileName.toString() == "session.lock") continue
+            val rel = patch.relativize(p)
+            val kind = if (rel.nameCount >= 2) rel.parent.fileName.toString() else null
+            if (kind in RESERVED_KINDS && rel.fileName.toString().endsWith(".mca")) {
+                if (kind == "region") patchRegionRels.add(rel)
+                patchMcaRels.add(rel)
+            }
+        }
+        // Entities/poi are rewritten by mergeRegion only when the sibling region exists in
+        // patch. An orphan patch entities/poi file (region absent) is skipped by the overlay,
+        // so base's copy of that entities/poi file must NOT be skipped here or base data is lost.
+        patchMcaRels.removeIf { rel ->
+            val kind = rel.parent?.fileName?.toString()
+            val regionSibling =
+                rel.parent
+                    ?.parent
+                    ?.resolve("region")
+                    ?.resolve(rel.fileName.toString())
+            kind != "region" && regionSibling !in patchRegionRels
+        }
+        copyTree(fs, base, outDir, patchMcaRels, { p, k, m -> record(p, k, m) })
 
         // 2. Overlay the optimized backup: merge region/entities/poi at chunk-slot level,
         //    replace every other file with the (newer) patch copy.
@@ -107,6 +133,7 @@ object DefaultMerger : MergeEngine {
             counters,
             { p, k, m -> record(p, k, m) },
             { s, c, t, p, m -> emit(s, c, t, p, m) },
+            request.runtime.parallelism,
         )
 
         val lock = outDir.resolve("session.lock")
@@ -157,11 +184,25 @@ object DefaultMerger : MergeEngine {
     }
 
     private fun overlaps(
+        fs: FileSystem,
         a: Path,
         b: Path,
     ): Boolean {
-        val na = a.toAbsolutePath().normalize()
-        val nb = b.toAbsolutePath().normalize()
+        fun resolve(p: Path): Path {
+            // On the real filesystem, follow symlinks/junctions so an output dir that
+            // aliases base/patch through a link is caught. MemoryFS.toRealPath materializes
+            // unrelated temp paths, so it must keep the lexical comparison.
+            if (fs is RealFileSystem && fs.exists(p)) {
+                try {
+                    return p.toRealPath()
+                } catch (_: Exception) {
+                    // fall through to lexical normalization
+                }
+            }
+            return p.toAbsolutePath().normalize()
+        }
+        val na = resolve(a)
+        val nb = resolve(b)
         return na == nb || na.startsWith(nb) || nb.startsWith(na)
     }
 
@@ -169,6 +210,7 @@ object DefaultMerger : MergeEngine {
         fs: FileSystem,
         src: Path,
         dst: Path,
+        skipRels: Set<Path>,
         record: (Path, String, String) -> Unit,
     ) {
         try {
@@ -187,6 +229,7 @@ object DefaultMerger : MergeEngine {
                         record(p, ERR_COPY, "Failed to create directory: ${e.message}")
                     }
                 p.fileName.toString() == "session.lock" -> Unit
+                skipRels.contains(src.relativize(p)) -> Unit
                 else ->
                     try {
                         fs.createDirectories(target.parent ?: dst)
@@ -207,57 +250,90 @@ object DefaultMerger : MergeEngine {
         counters: MergeCounters,
         record: (Path, String, String) -> Unit,
         emit: (ProgressStage, Long?, Long?, Path?, String?) -> Unit,
+        parallelism: Int,
     ) {
-        val reserved = setOf("region", "entities", "poi")
-        val total =
+        val files =
             fs
                 .walk(patch)
-                .count { it != patch && fs.isRegularFile(it) && it.fileName.toString() != "session.lock" }
-                .toLong()
-        var done = 0L
-        emit(ProgressStage.CopyMisc, done, total, patch, "overlaying patch")
-        for (p in fs.walk(patch)) {
-            if (p == patch || !fs.isRegularFile(p) || p.fileName.toString() == "session.lock") continue
+                .filter { it != patch && fs.isRegularFile(it) && it.fileName.toString() != "session.lock" }
+        val total = files.size.toLong()
+        emit(ProgressStage.CopyMisc, 0, total, patch, "overlaying patch")
+
+        val regionFiles =
+            files.filter { p ->
+                val rel = patch.relativize(p)
+                rel.parent?.fileName.toString() == "region" && rel.fileName.toString().endsWith(".mca")
+            }
+        val miscFiles = files.filter { p -> !regionFiles.contains(p) }
+        // Region merging happens first; CopyMiscProgress reports only the misc overlay, so its
+        // total is the misc count, otherwise the final percentage never reaches 100%.
+        val miscTotal = miscFiles.size.toLong()
+
+        fun processRegion(p: Path) {
             val rel = patch.relativize(p)
-            val kind = if (rel.nameCount >= 2) rel.parent.fileName.toString() else null
-            val isMcaUnderReserved = kind in reserved && rel.fileName.toString().endsWith(".mca")
-            if (isMcaUnderReserved) {
-                if (kind == "region") {
-                    val name = rel.fileName.toString()
-                    val baseFile = base.resolve(rel)
-                    val outFile = out.resolve(rel)
-                    if (fs.isRegularFile(baseFile)) {
-                        try {
-                            mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record)
-                        } catch (e: Exception) {
-                            record(p, ERR_MCA, "Failed to merge region file: ${e.message}")
-                        }
-                    } else {
-                        // Patch-only region: copy the region plus its entities/poi siblings.
-                        // rel is region/<name> in the flat layout or dimensions/.../region/<name>
-                        // in the nested layout; the parent of "region" is the dimension dir.
-                        copyFile(fs, p, outFile, counters, record, copied = true)
-                        val dimDir = rel.parent.parent ?: Path.of("")
-                        val entRel = dimDir.resolve("entities").resolve(name)
-                        val poiRel = dimDir.resolve("poi").resolve(name)
-                        if (fs.isRegularFile(patch.resolve(entRel))) {
-                            copyFile(fs, patch.resolve(entRel), out.resolve(entRel), counters, record, copied = true)
-                        }
-                        if (fs.isRegularFile(patch.resolve(poiRel))) {
-                            copyFile(fs, patch.resolve(poiRel), out.resolve(poiRel), counters, record, copied = true)
-                        }
+            val name = rel.fileName.toString()
+            val baseFile = base.resolve(rel)
+            val outFile = out.resolve(rel)
+            if (fs.isRegularFile(baseFile)) {
+                try {
+                    mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record)
+                } catch (e: Exception) {
+                    record(p, ERR_MCA, "Failed to merge region file: ${e.message}")
+                }
+            } else {
+                // Patch-only region: copy the region plus its entities/poi siblings.
+                // rel is region/<name> in the flat layout or dimensions/.../region/<name>
+                // in the nested layout; the parent of "region" is the dimension dir.
+                copyFile(fs, p, outFile, counters, record, copied = true)
+                val dimDir = rel.parent.parent ?: Path.of("")
+                val entRel = dimDir.resolve("entities").resolve(name)
+                val poiRel = dimDir.resolve("poi").resolve(name)
+                if (fs.isRegularFile(patch.resolve(entRel))) {
+                    copyFile(fs, patch.resolve(entRel), out.resolve(entRel), counters, record, copied = true)
+                }
+                if (fs.isRegularFile(patch.resolve(poiRel))) {
+                    copyFile(fs, patch.resolve(poiRel), out.resolve(poiRel), counters, record, copied = true)
+                }
+            }
+        }
+
+        if (parallelism > 1 && regionFiles.size > 1) {
+            val executor =
+                java.util.concurrent.Executors
+                    .newFixedThreadPool(parallelism)
+            try {
+                val futures =
+                    regionFiles.map { p ->
+                        executor.submit(java.util.concurrent.Callable { processRegion(p) })
+                    }
+                futures.forEach { f ->
+                    try {
+                        f.get()
+                    } catch (e: Exception) {
+                        record(patch, "Parallel", "Region parallel processing failed: ${e.message ?: "unknown error"}")
                     }
                 }
-                // entities/poi patch files are processed together with their region; skip here.
-            } else {
+            } finally {
+                executor.shutdown()
+            }
+        } else {
+            regionFiles.forEach { processRegion(it) }
+        }
+
+        var done = 0L
+        for (p in miscFiles) {
+            val rel = patch.relativize(p)
+            val kind = if (rel.nameCount >= 2) rel.parent.fileName.toString() else null
+            val isMcaUnderReserved = kind in RESERVED_KINDS && rel.fileName.toString().endsWith(".mca")
+            if (!isMcaUnderReserved) {
                 copyFile(fs, p, out.resolve(rel), counters, record, copied = false)
             }
             done += 1
             if (done % 1000L == 0L) {
-                emit(ProgressStage.CopyMiscProgress, done, total, p, null)
+                emit(ProgressStage.CopyMiscProgress, done, miscTotal, p, null)
             }
         }
-        emit(ProgressStage.CopyMiscProgress, done, total, patch, null)
+        emit(ProgressStage.CopyMiscProgress, done, miscTotal, patch, null)
     }
 
     private fun copyFile(
@@ -306,10 +382,14 @@ object DefaultMerger : MergeEngine {
 
         val crb = openReader(fs, ioFactory, baseRegion, record, ERR_MCA)
         val crp = openReader(fs, ioFactory, patchRegion, record, ERR_MCA)
-        // Patch region must be readable; if the base region is corrupt, treat base as empty
-        // and keep every valid patch chunk instead of dropping the whole file.
+        // Patch region must be readable. If it is corrupt, the base copy (already skipped by
+        // copyTree for common files) must be restored byte-for-byte so nothing is dropped.
         if (crp == null) {
             crb?.close()
+            copyBaseIfPresent(fs, baseRegion, outRegion, record, ERR_MCA)
+            copyBaseIfPresent(fs, baseDim.resolve("entities").resolve(name), outEntities, record, ERR_ENTITIES)
+            copyBaseIfPresent(fs, baseDim.resolve("poi").resolve(name), outPoi, record, ERR_POI)
+            counters.mergedRegions.incrementAndGet()
             return
         }
         val erb =
@@ -382,6 +462,22 @@ object DefaultMerger : MergeEngine {
                 } catch (_: Exception) {
                 }
             }
+        }
+    }
+
+    private fun copyBaseIfPresent(
+        fs: FileSystem,
+        src: Path,
+        dst: Path,
+        record: (Path, String, String) -> Unit,
+        kind: String,
+    ) {
+        if (!fs.isRegularFile(src)) return
+        try {
+            fs.createDirectories(dst.parent ?: dst)
+            fs.copy(src, dst, true)
+        } catch (e: Exception) {
+            record(src, kind, "Failed to copy file: ${e.message}")
         }
     }
 

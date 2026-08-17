@@ -232,15 +232,19 @@ class Main : Callable<Int> {
     companion object {
         @JvmStatic
         fun main(args: Array<String>) {
-            val exit =
-                when (args.firstOrNull()) {
-                    // Dispatch `merge ...` to the merge subcommand; everything else keeps
-                    // the original `backup <world>` behavior.
-                    "merge" -> CommandLine(MergeCommand()).execute(*args.drop(1).toTypedArray())
-                    else -> CommandLine(Main()).execute(*args)
-                }
+            val exit = dispatch(args)
             if (exit != 0) System.exit(exit)
         }
+
+        /** Resolves `args` to a subcommand and returns its exit code without calling System.exit. */
+        @JvmStatic
+        fun dispatch(args: Array<String>): Int =
+            when (args.firstOrNull()) {
+                // Dispatch `merge ...` to the merge subcommand; everything else keeps
+                // the original `backup <world>` behavior.
+                "merge" -> CommandLine(MergeCommand()).execute(*args.drop(1).toTypedArray())
+                else -> CommandLine(Main()).execute(*args)
+            }
     }
 }
 

@@ -1,11 +1,14 @@
 package com.jokerhub.orzmc.world
 
+import com.jokerhub.orzmc.FailingFileSystem
+import com.jokerhub.orzmc.mca.McaEntry
 import com.jokerhub.orzmc.util.CompressionKind
 import com.jokerhub.orzmc.util.McaMemoryBuilder
 import com.jokerhub.orzmc.util.McaMemoryBuilder.MemChunk
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -413,6 +416,176 @@ class WorldMergerTest {
         assertEquals(0, received[0].removedChunks)
     }
 
+    private fun runMergeOn(
+        fs: FileSystem = this.fs,
+        ioFactory: McaIOFactory = this.io,
+        progressSink: ProgressSink = NoopProgressSink,
+        force: Boolean = false,
+    ): MergeReport =
+        WorldMerger.run(
+            MergeRequest(
+                base = base,
+                patch = patch,
+                output = out,
+                outputOptions = OutputOptions(force = force),
+                progress = ProgressOptions(sink = progressSink),
+                io = IOOptions(fs = fs, ioFactory = ioFactory),
+            ),
+        )
+
+    @Test
+    fun `patch nested inside output is rejected`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = out.resolve("nested").resolve("patch"),
+                    output = out,
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Input", report.errors[0].kind)
+    }
+
+    @Test
+    fun `corrupt patch region keeps base region and entities`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900, 1 to 100))
+        writeMca(base, "entities", "r.0.0.mca", mca(0 to 1))
+        writeMca(patch, "region", "r.0.0.mca", byteArrayOf(1, 2, 3, 4))
+
+        val report = runMerge()
+
+        assertEquals(0, report.errors.size)
+        assertEquals(1, report.mergedRegions)
+        assertEquals(2, entryCount(out, "region", "r.0.0.mca"))
+        assertEquals(900, readInhabited(out, "region", "r.0.0.mca", 0))
+        assertEquals(100, readInhabited(out, "region", "r.0.0.mca", 1))
+        assertEquals(1, entryCount(out, "entities", "r.0.0.mca"))
+    }
+
+    @Test
+    fun `output directory creation failure records output error`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        val failing = FailingFileSystem(fs, "createDirectories")
+
+        val report = runMergeOn(fs = failing, ioFactory = UnwrappingIOFactory())
+
+        assertEquals(1, report.errors.size)
+        assertEquals("Output", report.errors[0].kind)
+    }
+
+    @Test
+    fun `copy failure in copy tree records copy error and continues`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        fs.write(base.resolve("level.dat"), "BASE".toByteArray())
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        val failing = FailingFileSystem(fs, "copy")
+
+        val report = runMergeOn(fs = failing, ioFactory = UnwrappingIOFactory())
+
+        assertTrue(report.errors.any { it.kind == "Copy" })
+        assertEquals(1, report.mergedRegions)
+        assertEquals(1000, readInhabited(out, "region", "r.0.0.mca", 0))
+    }
+
+    @Test
+    fun `finalize write failure records write error and merge completes`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+
+        val report = runMergeOn(ioFactory = FailingFinalizeIOFactory())
+
+        assertTrue(report.errors.any { it.kind == "Write" })
+        assertEquals(1, report.mergedRegions)
+    }
+
+    @Test
+    fun `open reader failure records mca error and keeps patch chunks`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        val baseRegion = base.resolve(dim).resolve("region").resolve("r.0.0.mca")
+
+        val report = runMergeOn(ioFactory = ThrowingReaderIOFactory(baseRegion))
+
+        assertTrue(report.errors.any { it.kind == "MCA" })
+        assertEquals(1, report.patchSlots)
+        assertEquals(0, report.baseSlots)
+        assertEquals(1000, readInhabited(out, "region", "r.0.0.mca", 0))
+    }
+
+    @Test
+    fun `progress sink receives init copy and done events exactly once`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        val events = mutableListOf<ProgressEvent>()
+
+        val report = runMergeOn(progressSink = CallbackProgressSink { events.add(it) })
+
+        assertEquals(0, report.errors.size)
+        assertEquals(1, events.count { it.stage == ProgressStage.Init })
+        assertEquals(1, events.count { it.stage == ProgressStage.CopyMisc })
+        assertEquals(1, events.count { it.stage == ProgressStage.Done })
+    }
+
+    @Test
+    fun `standalone patch entities and poi without region are ignored`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(patch, "entities", "r.9.9.mca", mca(0 to 1))
+        writeMca(patch, "poi", "r.9.9.mca", mca(0 to 2))
+
+        val report = runMerge()
+
+        assertEquals(0, report.errors.size)
+        assertNull(fs.read(out.resolve(dim).resolve("entities").resolve("r.9.9.mca")))
+        assertNull(fs.read(out.resolve(dim).resolve("poi").resolve("r.9.9.mca")))
+    }
+
+    @Test
+    fun `orphan patch entities without region keeps base region and entities`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900))
+        writeMca(base, "entities", "r.0.0.mca", mca(0 to 5))
+        writeMca(patch, "entities", "r.0.0.mca", mca(0 to 9))
+
+        val report = runMerge()
+
+        assertEquals(0, report.errors.size)
+        assertEquals(900, readInhabited(out, "region", "r.0.0.mca", 0))
+        // patch has no region r.0.0, so the region is base-only; its base entities must
+        // survive even though patch carries an orphan entities file for the same name.
+        assertEquals(1, entryCount(out, "entities", "r.0.0.mca"))
+        assertEquals(5L, readInhabited(out, "entities", "r.0.0.mca", 0))
+    }
+
+    @Test
+    fun `parallel merge produces identical slots`() {
+        writeMca(base, "region", "r.0.0.mca", mca(0 to 900, 1 to 100))
+        writeMca(base, "region", "r.1.1.mca", mca(3 to 50))
+        writeMca(patch, "region", "r.0.0.mca", mca(0 to 1000))
+        writeMca(patch, "region", "r.1.1.mca", mca(3 to 60))
+
+        val report =
+            WorldMerger.run(
+                MergeRequest(
+                    base = base,
+                    patch = patch,
+                    output = out,
+                    runtime = RuntimeOptions(parallelism = 2),
+                    io = IOOptions(fs = fs, ioFactory = io),
+                ),
+            )
+
+        assertEquals(0, report.errors.size)
+        assertEquals(2, report.mergedRegions)
+        assertEquals(1000, readInhabited(out, "region", "r.0.0.mca", 0))
+        assertEquals(100, readInhabited(out, "region", "r.0.0.mca", 1))
+        assertEquals(60, readInhabited(out, "region", "r.1.1.mca", 3))
+    }
+
     private fun readInhabited(
         world: Path,
         kind: String,
@@ -422,4 +595,65 @@ class WorldMergerTest {
         val payload = readPayload(world, kind, name, slot) ?: return null
         return ByteBuffer.wrap(payload, payload.size - 8, 8).order(ByteOrder.BIG_ENDIAN).long
     }
+}
+
+/** [McaIOFactory] that reaches the underlying [MemoryFS] through a [FailingFileSystem] wrapper. */
+private class UnwrappingIOFactory : McaIOFactory {
+    private val inner = MemoryMcaIOFactory()
+
+    private fun unwrap(fs: FileSystem): FileSystem = if (fs is FailingFileSystem) fs.delegate else fs
+
+    override fun openReader(
+        fs: FileSystem,
+        path: Path,
+    ): McaReaderLike = inner.openReader(unwrap(fs), path)
+
+    override fun createWriter(
+        fs: FileSystem,
+        path: Path,
+    ): McaWriterLike = inner.createWriter(unwrap(fs), path)
+}
+
+/** [McaIOFactory] whose writers throw on [McaWriterLike.finalizeFile], for write-error paths. */
+private class FailingFinalizeIOFactory : McaIOFactory {
+    private val inner = MemoryMcaIOFactory()
+
+    override fun openReader(
+        fs: FileSystem,
+        path: Path,
+    ): McaReaderLike = inner.openReader(fs, path)
+
+    override fun createWriter(
+        fs: FileSystem,
+        path: Path,
+    ): McaWriterLike {
+        val delegate = inner.createWriter(fs, path)
+        return object : McaWriterLike {
+            override fun writeEntry(entry: McaEntry) = delegate.writeEntry(entry)
+
+            override fun finalizeFile() = throw java.io.IOException("injected finalize failure")
+
+            override fun close() = delegate.close()
+        }
+    }
+}
+
+/** [McaIOFactory] whose reader throws for a specific path, for read-error paths. */
+private class ThrowingReaderIOFactory(
+    private val throwFor: Path,
+) : McaIOFactory {
+    private val inner = MemoryMcaIOFactory()
+
+    override fun openReader(
+        fs: FileSystem,
+        path: Path,
+    ): McaReaderLike {
+        if (path == throwFor) throw java.io.IOException("injected read failure")
+        return inner.openReader(fs, path)
+    }
+
+    override fun createWriter(
+        fs: FileSystem,
+        path: Path,
+    ): McaWriterLike = inner.createWriter(fs, path)
 }

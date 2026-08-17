@@ -66,6 +66,14 @@ world/
 - **entities/poi 锁步**：槽位来源为 patch → 取 patch 的 entities/poi 该槽（无则空，即 08-15 该 chunk 无实体）；来源为 base → 取 base 对应槽。**绝不能直接复制 base 的 entities/poi**，否则 patch 来源槽会残留 08-12 旧实体。
 - 合并后全空的 entities/poi 文件**不生成**（与 MC 约定一致，也避免 08-12 空文件残留）。
 
+### 2.5 目录互斥校验（alias guard）
+
+base/patch/output 三个目录必须互不重叠：`overlaps()` 对绝对化归一化后的路径做相等/前缀包含判定，任一两两重叠（如 `output == base` 加 `--force`）都会先于任何写入被拒绝，避免源世界被误覆盖。
+
+### 2.6 损坏 patch 回退
+
+若 patch 的 region 文件损坏（无法打开/解析），**不丢弃 base 数据**：base 对应 region 及其 entities/poi 会按字节复制到输出（`copyBaseIfPresent`），并在报告中记录 MCA 错误。同时，为跳过冗余 base→out 复制（见 3.2）的公共 .mca 文件，其 base 副本必须由该回退路径恢复，保证任何损坏情形下输出都完整。
+
 ---
 
 ## 3. 处理方法
@@ -84,7 +92,7 @@ java -jar app/build/libs/backup.jar merge E:\recover\world E:\recover\world_back
   --report --progress-mode Global
 ```
 
-合并过程：① 全量复制 base → output（保住 base 全部 chunk）；② 逐文件覆盖 patch：region 槽位级合并、entities/poi 锁步、杂项文件覆盖；③ 删除 `session.lock`；④ 输出 `MergeReport`。
+合并过程：① 复制 base → output 保住 base 全部 chunk（**跳过 patch 也存在的 `region/entities/poi/*.mca` 的冗余复制**，这些文件会在③由合并结果重写）；② 逐文件覆盖 patch：region 槽位级合并（可 `--parallelism N` 并行，输出仍确定）、entities/poi 锁步、杂项文件覆盖；③ 删除 `session.lock`；④ 输出 `MergeReport`。
 
 ### 3.3 一次性原型脚本
 
@@ -102,6 +110,7 @@ java -jar app/build/libs/backup.jar merge E:\recover\world E:\recover\world_back
 |------|------|
 | `mergedRegions` | 同时存在于 base/patch、做了槽位级合并的 region 数 |
 | `patchSlots` / `baseSlots` | 取自 patch（08-15）与 base（08-12）的槽位数 |
+| `linkedEntities` / `linkedPoi` | 锁步写入的 entities/poi 条目数 |
 | `copiedFiles` / `overlayFiles` | patch 独有的 region 文件 / 覆盖的杂项文件 |
 | `errors` | 错误数，验收要求为 0 |
 

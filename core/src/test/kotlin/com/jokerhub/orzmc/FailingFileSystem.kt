@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ```
  */
 class FailingFileSystem(
-    private val delegate: FileSystem,
+    val delegate: FileSystem,
     private val failOnOps: Set<String> = emptySet(),
     private val failCounter: MutableMap<String, AtomicBoolean>? = null,
 ) : FileSystem {
