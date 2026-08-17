@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- 修复 `--copy-misc` 在 picocli 4.7 `negatable = true` 下开关反转：裸写 `--copy-misc` 被解析为
+  `false`（杂项文件全部不备份），`--no-copy-misc` 反而生效。增加 `fallbackValue = "true"` 修正。
+- 修复 `copyMiscFiles`/`countMiscFiles` 整棵跳过 `region/entities/poi` 子树导致其中非 `.mca` 文件
+  （如 `r.0.2.mca.bak`、`r.0.-4.mca.<id>.backup`）被静默丢弃的问题：改为仅跳过会被维度处理器
+  重写的顶层 `.mca`（`rel.nameCount == 2`），`.bak`/`.backup` 等照常复制。
+- 重构杂项跳过逻辑为共享辅助函数 `miscRel`/`skipMatchers`，修复 `countMiscFiles` 与
+  `copyMiscFiles` 对 `session.lock` 计数不一致导致的进度总数虚高；移除 `copyMiscFiles` 未使用的
+  `miscTotal` 参数。
+
+### Testing
+- 新增 `RealWorldPatternTest`（MemoryFS）：region/entities/poi 内非 `.mca` 保留、零字节 `level*.dat`
+  保留、根级/维度级 `death-chests.yml` 保留、全剔除 region 文件消失（惰性写入器）。
+- `MainCliCopyMiscTest` 新增裸 `--copy-misc` 启用杂项复制回归测试。
+- 磁盘夹具 `Fixtures/world-26-1` 扩展（`region/r.0.0.mca.bak`、零字节 `level<数字>.dat`、
+  `death-chests.yml`），`FixtureCompatibilityTest` 新增对应存在性断言。
+
+### Docs
+- 新增 `docs/real-world-backup-validation.md`：基于真实 PaperMC 26.1+ 世界（`E:\test\world`，
+  29,046 文件 / 14.3 GB）的备份验证报告，含磁盘占用前后对比、丢失文件分类、两处缺陷与两轮
+  代码审查记录，以及 1/2/3/4/5 分钟 InhabitedTime 阈值优化效果对比。
+
 ## v0.1.6 (2026-07-04)
 
 ### Fixed

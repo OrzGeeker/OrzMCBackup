@@ -100,6 +100,10 @@ jobs:
             app/build/reports/tests/
   coverage:
     runs-on: ubuntu-latest
+    env:
+      # Dependabot-triggered runs get "Secret source: Dependabot" and no repo
+      # secrets; an empty token makes codecov-action fail with fail_ci_if_error.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - name: Setup Java 25
@@ -119,6 +123,8 @@ jobs:
           name: coverage-report
           path: core/build/reports/kover/
       - name: Upload to CodeCov
+        # Skip on dependabot runs where CODECOV_TOKEN is not available.
+        if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v7
         with:
           directory: core/build/reports/kover/
