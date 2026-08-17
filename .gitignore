@@ -28,3 +28,6 @@ tmp/
 
 # Keep Gradle wrapper files tracked
 # gradle/wrapper/gradle-wrapper.jar should be committed
+
+# Personal Claude Code local settings
+.claude/settings.local.json
