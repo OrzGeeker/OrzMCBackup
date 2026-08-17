@@ -82,7 +82,8 @@ object DefaultMerger : MergeEngine {
             record(base, ERR_INPUT, "base/patch must be existing directories")
             return MergeReport(errors = errors)
         }
-        val outDir = resolveOutputDir(fs, request, errors, { p, k, m -> record(p, k, m) }) ?: return MergeReport(errors = errors)
+        val outDir =
+            resolveOutputDir(fs, request, errors, { p, k, m -> record(p, k, m) }) ?: return MergeReport(errors = errors)
         emit(ProgressStage.Init, 0, 0, base, "starting merge")
 
         // 1. Copy the full backup to the output, so every chunk from the base is preserved.
@@ -130,7 +131,11 @@ object DefaultMerger : MergeEngine {
         if (fs.exists(out)) {
             if (fs.list(out).isNotEmpty()) {
                 if (!request.outputOptions.force) {
-                    record(out, ERR_OUTPUT, "Output directory already exists and is not empty; use --force to overwrite")
+                    record(
+                        out,
+                        ERR_OUTPUT,
+                        "Output directory already exists and is not empty; use --force to overwrite",
+                    )
                     return null
                 }
                 fs.walk(out).sortedByDescending { it.toString().length }.forEach { fs.deleteIfExists(it) }
@@ -212,10 +217,24 @@ object DefaultMerger : MergeEngine {
                             val entRel = dimRel.resolve("entities").resolve(name)
                             val poiRel = dimRel.resolve("poi").resolve(name)
                             if (fs.isRegularFile(patch.resolve(entRel))) {
-                                copyFile(fs, patch.resolve(entRel), out.resolve(entRel), counters, record, copied = true)
+                                copyFile(
+                                    fs,
+                                    patch.resolve(entRel),
+                                    out.resolve(entRel),
+                                    counters,
+                                    record,
+                                    copied = true,
+                                )
                             }
                             if (fs.isRegularFile(patch.resolve(poiRel))) {
-                                copyFile(fs, patch.resolve(poiRel), out.resolve(poiRel), counters, record, copied = true)
+                                copyFile(
+                                    fs,
+                                    patch.resolve(poiRel),
+                                    out.resolve(poiRel),
+                                    counters,
+                                    record,
+                                    copied = true,
+                                )
                             }
                         }
                     }

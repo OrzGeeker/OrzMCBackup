@@ -11,7 +11,8 @@ object MergeReportIO {
 
     fun toText(r: MergeReport): String {
         val sb = StringBuilder()
-        sb.append("Statistics: mergedRegions=")
+        sb
+            .append("Statistics: mergedRegions=")
             .append(r.mergedRegions)
             .append(" patchSlots=")
             .append(r.patchSlots)
@@ -31,7 +32,10 @@ object MergeReportIO {
         if (r.errors.isNotEmpty()) {
             sb.append("Error list:\n")
             r.errors.forEach { e ->
-                sb.append("[").append(e.kind).append("] ")
+                sb
+                    .append("[")
+                    .append(e.kind)
+                    .append("] ")
                     .append(e.path)
                     .append(" - ")
                     .append(e.message)

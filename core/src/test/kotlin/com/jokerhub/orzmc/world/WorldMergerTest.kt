@@ -103,7 +103,10 @@ class WorldMergerTest {
 
         runMerge()
 
-        assertNull(readPayload(out, "entities", "r.0.0.mca", 0), "stale base entities for patch-sourced slot must be dropped")
+        assertNull(
+            readPayload(out, "entities", "r.0.0.mca", 0),
+            "stale base entities for patch-sourced slot must be dropped",
+        )
         assertEquals(1, readInhabited(out, "entities", "r.0.0.mca", 1), "base entities for base-sourced slot are kept")
         assertEquals(1, entryCount(out, "entities", "r.0.0.mca"))
     }
