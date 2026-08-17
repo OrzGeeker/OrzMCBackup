@@ -44,7 +44,30 @@ class MainCliCopyMiscTest {
         assertTrue(Files.exists(out.resolve("foo.txt")))
         assertTrue(Files.exists(out.resolve("misc").resolve("note.txt")))
         assertTrue(Files.exists(out.resolve("region").resolve("r.0.0.mca")))
-        assertFalse(Files.exists(out.resolve("entities").resolve("ignore.txt")))
+        // Non-.mca files inside reserved dirs (entities/poi/region) are misc and
+        // must be preserved, not silently dropped.
+        assertTrue(Files.exists(out.resolve("entities").resolve("ignore.txt")))
+        Cleaner.deleteTreeWithRetry(out, 5, 10)
+        Cleaner.deleteTreeWithRetry(input, 5, 10)
+    }
+
+    @Test
+    fun `bare copy-misc flag enables misc copying`() {
+        val (input, out) = createMinimalWorld()
+        val exit =
+            CommandLine(Main()).execute(
+                input.toString(),
+                out.toString(),
+                "-t",
+                "0",
+                "--progress-mode",
+                "Off",
+                "--force",
+                "--copy-misc",
+            )
+        assertTrue(exit == 0)
+        assertTrue(Files.exists(out.resolve("foo.txt")))
+        assertTrue(Files.exists(out.resolve("misc").resolve("note.txt")))
         Cleaner.deleteTreeWithRetry(out, 5, 10)
         Cleaner.deleteTreeWithRetry(input, 5, 10)
     }
