@@ -45,6 +45,29 @@ Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描�
 - --copy-misc：非原地模式下，复制维度目录及 world 级目录中除 region/entities/poi 以外的文件与文件夹（默认 true；支持 --copy-misc=false 或 --no-copy-misc）。26.1+ 结构下，无论输入是服务器根目录还是 world 目录，都会正确复制 world 级别的杂项文件（`level.dat`、`data/`、`players/` 等）
 - --dry-run：预览模式，只扫描统计不写入任何输出（默认 false）
 
+### merge 子命令（槽位级合并优化备份与全量备份）
+
+当仅剩"优化备份 + 更早全量备份"两份数据时，可用 `merge` 以 chunk 槽位粒度合并，恢复"全量最新"地图
+（patch 槽位优先、base 填充空槽、entities/poi 锁步），避免同名文件覆盖导致的地图空洞/地形回退。
+
+```bash
+# 构建
+./gradlew :app:shadowJar --no-daemon
+# 合并（BASE=更早全量备份，PATCH=优化备份，OUTPUT=恢复结果）
+java -jar app/build/libs/backup.jar merge E:\recover\world E:\recover\world_backup E:\recover\world_recovered \
+  --report --progress-mode Global
+```
+
+merge 子命令参数：
+
+- BASE / PATCH / OUTPUT：三个位置参数（全量备份 / 优化备份 / 输出目录）
+- -f, --force：覆盖已存在且非空的输出目录（无交互）
+- --progress-mode / --progress-interval：进度选项（同 backup）
+- --report：在标准输出打印合并统计与错误列表
+- --report-file / --report-format：报告写入文件（json | csv）
+
+详细背景、算法与验收方法见 [docs/papermc-map-backup-recovery-case.md](docs/papermc-map-backup-recovery-case.md)。
+
 ## 作为库使用
 - [公共Maven仓库发布地址](https://repo1.maven.org/maven2/io/github/wangzhizhou/backup-core/)
 - 发布到本地 Maven 仓库：

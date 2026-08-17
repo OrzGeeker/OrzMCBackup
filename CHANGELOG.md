@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+- 新增 `merge` 子命令：以 chunk 槽位粒度合并"优化备份 + 更早全量备份"，恢复"全量最新"地图。
+  对每个同时存在于 base/patch 的 region 文件逐槽位取源（patch 优先、base 填充、entities/poi 锁步），
+  防止同名文件覆盖导致的地图空洞/地形回退。核心实现在 `WorldMerger.kt`，CLI 入口 `MergeCommand.kt`，
+  报告序列化 `MergeReportIO.kt`。
+
+### Docs
+- 新增 `docs/papermc-map-backup-recovery-case.md`：基于真实 PaperMC 26.2 世界（08-12 全量备份 +
+  08-15 优化备份）的槽位级合并典型场景案例，含背景数据、Anvil region 格式与合并算法知识点、
+  处理方法、统计对齐/槽位并集复核/跨实现逐字节比对三重验收方法与实测结果。
+
 ### Fixed
 - 修复 `--copy-misc` 在 picocli 4.7 `negatable = true` 下开关反转：裸写 `--copy-misc` 被解析为
   `false`（杂项文件全部不备份），`--no-copy-misc` 反而生效。增加 `fallbackValue = "true"` 修正。
