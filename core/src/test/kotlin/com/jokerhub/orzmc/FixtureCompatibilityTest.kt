@@ -316,6 +316,57 @@ class FixtureCompatibilityTest {
     }
 
     @Test
+    fun `paper 26 dot 1 preserves real world runtime and region backup files`() {
+        val fixture = TestPaths.world26_1()
+        val input = TestTmp.createTempDirectory("fixture-26-1-real-")
+        val worldDir = input.resolve("world")
+        copyDir(fixture, worldDir)
+
+        val out = TestTmp.createTempDirectory("fixture-26-1-real-out-")
+        try {
+            Optimizer.run(
+                OptimizerRequest(
+                    input = input,
+                    output = out,
+                    filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                    outputOptions = OutputOptions(force = true),
+                ),
+            )
+        } catch (e: FileSystemException) {
+            fsFail(e)
+        }
+
+        // Zero-byte level<number>.dat temp files at world root must be preserved
+        assertTrue(
+            Files.exists(out.resolve("world/level12345678901234567890.dat")),
+            "zero-byte world-root level temp file should be copied",
+        )
+        // Plugin YAML at world root and per dimension must be preserved
+        assertTrue(
+            Files.exists(out.resolve("world/death-chests.yml")),
+            "world-root death-chests.yml should be copied",
+        )
+        for (dim in listOf("overworld", "the_nether", "the_end")) {
+            assertTrue(
+                Files.exists(out.resolve("world/dimensions/minecraft/$dim/death-chests.yml")),
+                "$dim/death-chests.yml should be copied",
+            )
+        }
+        // Non-.mca files inside region/ must be preserved (e.g. region backups)
+        assertTrue(
+            Files.exists(out.resolve("world/dimensions/minecraft/overworld/region/r.0.0.mca.bak")),
+            "overworld region .mca.bak should be copied",
+        )
+        assertTrue(
+            Files.exists(out.resolve("world/dimensions/minecraft/overworld/region/other-file.txt")),
+            "overworld region non-mca file should be copied",
+        )
+
+        Cleaner.deleteTreeWithRetry(out, 5, 10)
+        Cleaner.deleteTreeWithRetry(input, 5, 10)
+    }
+
+    @Test
     fun `old structure preserves player data and metadata files`() {
         val fixture = TestPaths.world()
         val input = TestTmp.createTempDirectory("fixture-old-meta-")
