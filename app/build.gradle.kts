@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     application
     alias(libs.plugins.shadow)
+    alias(libs.plugins.kover)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
 }

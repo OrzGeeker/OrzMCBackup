@@ -232,7 +232,13 @@ class Main : Callable<Int> {
     companion object {
         @JvmStatic
         fun main(args: Array<String>) {
-            val exit = CommandLine(Main()).execute(*args)
+            val exit =
+                when (args.firstOrNull()) {
+                    // Dispatch `merge ...` to the merge subcommand; everything else keeps
+                    // the original `backup <world>` behavior.
+                    "merge" -> CommandLine(MergeCommand()).execute(*args.drop(1).toTypedArray())
+                    else -> CommandLine(Main()).execute(*args)
+                }
             if (exit != 0) System.exit(exit)
         }
     }
