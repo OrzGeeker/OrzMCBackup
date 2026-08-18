@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Minecraft Java 世界优化备份工具：按玩家活跃时间（InhabitedTime）逐区块裁剪世界体积，实测 -85.4% 零非预期数据丢失；优化备份与全量备份可槽位级合并恢复。">
+<meta property="og:title" content="OrzMCBackup — Minecraft 世界优化备份工具">
+<meta property="og:description" content="按玩家活跃时间逐区块裁剪世界体积：实测 -85.4%，零非预期数据丢失，支持槽位级合并恢复。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://orzmc.github.io/OrzMCBackup/">
+<title>OrzMCBackup — Minecraft 世界优化备份工具</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛏️</text></svg>">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-elev: #161b22;
+  --bg-hover: #1c2128;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-strong: #e6edf3;
+  --text-muted: #8b949e;
+  --green: #3fb950;
+  --green-dark: #238636;
+  --green-soft: rgba(63, 185, 80, 0.10);
+  --green-border: rgba(63, 185, 80, 0.35);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+.container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+a { color: var(--green); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, .num { font-family: var(--mono); }
+section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+h2 {
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+  color: var(--text-strong);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+.section-sub { color: var(--text-muted); margin-bottom: 36px; max-width: 760px; }
+h2 .accent { color: var(--green); }
+
+/* ---------- Nav ---------- */
+nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(13, 17, 23, 0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { display: flex; align-items: center; gap: 24px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--text-strong); font-weight: 600; font-size: 15px; }
+.brand:hover { text-decoration: none; }
+.brand .logo { font-size: 18px; }
+.nav-links { display: flex; gap: 18px; margin-left: auto; }
+.nav-links a { color: var(--text-muted); font-size: 14px; }
+.nav-links a:hover { color: var(--text-strong); text-decoration: none; }
+.btn {
+  display: inline-block; padding: 8px 16px; border-radius: 6px;
+  font-size: 14px; font-weight: 500; line-height: 1.4;
+  border: 1px solid var(--green-border); background: transparent; color: var(--green);
+  cursor: pointer; text-align: center; white-space: nowrap;
+  transition: background .15s ease, border-color .15s ease;
+}
+.btn:hover { text-decoration: none; background: var(--green-soft); }
+.btn-solid { background: var(--green); border-color: var(--green); color: #05290f; font-weight: 600; }
+.btn-solid:hover { background: #56d364; border-color: #56d364; }
+.btn-lg { padding: 12px 24px; font-size: 15px; }
+.nav-btn { margin-left: 8px; }
+.hamburger { display: none; background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; margin-left: auto; }
+
+/* ---------- Hero ---------- */
+.hero { padding: 88px 0 72px; border-bottom: 1px solid var(--border); background: radial-gradient(1000px 480px at 50% -120px, rgba(63, 185, 80, 0.10), transparent 70%); }
+.hero .tag {
+  display: inline-block; font-size: 12.5px; color: var(--green);
+  border: 1px solid var(--green-border); background: var(--green-soft);
+  padding: 4px 12px; border-radius: 999px; margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.1rem);
+  line-height: 1.2; color: var(--text-strong); font-weight: 700;
+  letter-spacing: 0.5px; margin-bottom: 20px; max-width: 820px;
+}
+.hero .sub { font-size: clamp(1rem, 1.6vw, 1.15rem); color: var(--text-muted); max-width: 720px; margin-bottom: 32px; }
+.hero .sub strong { color: var(--text-strong); font-weight: 600; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 48px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-elev);
+  font-size: 14px; color: var(--text);
+}
+.chip .num { font-size: 15px; font-weight: 600; color: var(--green); }
+
+/* ---------- Why ---------- */
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.card {
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px;
+}
+.card h3 { color: var(--text-strong); font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+.card h3 .ico { font-size: 20px; }
+.card p { font-size: 14.5px; color: var(--text-muted); }
+.note {
+  margin-top: 20px; padding: 14px 18px; border-radius: var(--radius);
+  border: 1px solid var(--green-border); background: var(--green-soft);
+  font-size: 14.5px; color: var(--text);
+}
+
+/* ---------- Metrics table ---------- */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; }
+th, td { padding: 12px 16px; text-align: left; font-size: 14px; white-space: nowrap; }
+th { color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); background: var(--bg-hover); }
+td { border-bottom: 1px solid var(--border); color: var(--text); }
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+tr.default td { background: var(--green-soft); }
+tr.default td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.tag {
+  display: inline-block; font-size: 11px; color: var(--green);
+  border: 1px solid var(--green-border); border-radius: 999px;
+  padding: 1px 8px; margin-right: 8px; vertical-align: 1px;
+}
+.takeaways { margin-top: 24px; display: grid; gap: 12px; }
+.takeaway {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px; font-size: 14.5px;
+}
+.takeaway .mark { color: var(--green); font-weight: 700; flex-shrink: 0; line-height: 1.4; }
+.takeaway b { color: var(--text-strong); }
+.source-note { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+
+/* ---------- Pipeline ---------- */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.step {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; position: relative;
+}
+.step .idx {
+  display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center;
+  background: var(--green); color: #05290f; font-weight: 700; font-size: 12px;
+  border-radius: 50%; margin-bottom: 10px; font-family: var(--mono);
+}
+.step .title { color: var(--text-strong); font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.step p { color: var(--text-muted); font-size: 12.5px; }
+
+/* ---------- Features ---------- */
+.grid-6 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.card .kbd { font-family: var(--mono); font-size: 13px; color: var(--green); }
+
+/* ---------- Code blocks ---------- */
+.codeblock { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); margin-bottom: 18px; overflow: hidden; }
+.codebar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; background: var(--bg-hover); border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+}
+.copy {
+  font-family: var(--sans); font-size: 12px; color: var(--text-muted);
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 10px; cursor: pointer;
+}
+.copy:hover { color: var(--text-strong); border-color: var(--text-muted); }
+.codeblock pre { padding: 14px 16px; overflow-x: auto; }
+.codeblock code { font-size: 13.5px; color: var(--text); line-height: 1.6; white-space: pre; }
+.code-note { font-size: 13.5px; color: var(--text-muted); margin-top: 6px; }
+
+/* ---------- Docs ---------- */
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.doc {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; transition: border-color .15s ease, background .15s ease;
+}
+.doc:hover { border-color: var(--green-border); background: var(--bg-hover); text-decoration: none; }
+.doc .t { color: var(--text-strong); font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+.doc .d { color: var(--text-muted); font-size: 13.5px; }
+
+/* ---------- CTA ---------- */
+.cta-banner {
+  border: 1px solid var(--green-border); background:
+    radial-gradient(700px 260px at 50% -80px, rgba(63, 185, 80, 0.16), transparent 70%), var(--bg-elev);
+  border-radius: 14px; padding: 48px 32px; text-align: center;
+}
+.cta-banner h2 { margin-bottom: 10px; }
+.cta-banner p { color: var(--text-muted); margin-bottom: 28px; }
+
+/* ---------- Footer ---------- */
+footer { padding: 40px 0 56px; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.badges img { display: block; height: 20px; }
+footer p { font-size: 13.5px; color: var(--text-muted); }
+footer a { color: var(--text); }
+footer a:hover { color: var(--green); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
+  section { padding: 56px 0; }
+  .hero { padding: 64px 0 56px; }
+  .nav-links {
+    display: none; position: absolute; top: 60px; left: 0; right: 0;
+    flex-direction: column; gap: 0; background: var(--bg-elev);
+    border-bottom: 1px solid var(--border); padding: 8px 24px;
+  }
+  .nav-links.open { display: flex; }
+  .nav-links a { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .nav-links a:last-child { border-bottom: none; }
+  .hamburger { display: block; }
+  .nav-btn { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a class="brand" href="#"><span class="logo">⛏️</span>OrzMCBackup</a>
+    <button class="hamburger" aria-label="菜单" aria-expanded="false">☰</button>
+    <div class="nav-links" id="navLinks">
+      <a href="#why">为什么需要</a>
+      <a href="#metrics">实测效果</a>
+      <a href="#features">核心特性</a>
+      <a href="#how">工作原理</a>
+      <a href="#quickstart">快速开始</a>
+      <a href="#docs">文档</a>
+      <a class="btn nav-btn" href="https://github.com/OrzMC/OrzMCBackup" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <span class="tag">开源 · Apache-2.0 · Kotlin — 面向 PaperMC / Vanilla</span>
+    <h1>Minecraft 世界优化备份工具</h1>
+    <p class="sub">
+      按玩家活跃时间（InhabitedTime）<strong>逐区块裁剪世界体积</strong>——备份更小、恢复更快、保留更高频。
+      优化备份与全量备份可<strong>槽位级合并恢复</strong>，实测<strong>零非预期数据丢失</strong>。
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-solid btn-lg" href="#quickstart">快速开始</a>
+      <a class="btn btn-lg" href="https://github.com/OrzMC/OrzMCBackup" target="_blank" rel="noopener">查看 GitHub</a>
+    </div>
+    <div class="chips">
+      <span class="chip"><span class="num">-85.4%</span> 体积</span>
+      <span class="chip"><span class="num">91.4%</span> 区块剔除</span>
+      <span class="chip"><span class="num">0</span> 非预期数据丢失</span>
+      <span class="chip"><span class="num">26.1+</span> 新格式</span>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="container">
+    <h2>为什么需要</h2>
+    <p class="section-sub">Minecraft 区块一经生成就不会自动消失——世界体积只涨不跌，备份成本随之失控。</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3><span class="ico">🌍</span>区块永久生成</h3>
+        <p>玩家探索、跑图、飞行会永久生成大量区块。其中绝大部分是"路过但从未建设"的区块，却与真正建设过的区块占用相同存储。</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico">📈</span>体积持续膨胀</h3>
+        <p>世界体积只增不减，备份文件随之膨胀。存储成本、传输耗时、恢复时长全部被动上升，备份保留策略被迫越来越稀疏。</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico">🔄</span>合并恢复缺口</h3>
+        <p>当只剩「优化备份 + 更早的全量备份」时，直接同名覆盖会造成地图空洞或地形回退——需要一个安全的合并恢复手段。</p>
+      </div>
+    </div>
+    <div class="note">
+      <b>OrzMCBackup</b> 在备份前按 InhabitedTime 阈值剔除低活跃区块，并自动保护强制加载区块；
+      若需要恢复更早的全量备份，<code>merge</code> 子命令以 chunk 槽位粒度合并，恢复"全量最新"地图。
+    </div>
+  </div>
+</section>
+
+<section id="metrics">
+  <div class="container">
+    <h2>实测效果 · 不同阈值对比</h2>
+    <p class="section-sub">
+      对同一真实 PaperMC 26.1+ 世界（29,046 文件 / 14,318.1 MB / 2,699,339 区块），仅改变 <code>-t</code>
+      阈值各跑一次完整备份，其余参数一致（<code>--copy-misc --parallelism 4</code>）。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>阈值</th>
+            <th class="num">输出大小</th>
+            <th class="num">保留区块</th>
+            <th class="num">剔除区块</th>
+            <th class="num">剔除率</th>
+            <th class="num">节省 MB</th>
+            <th class="num">压缩率</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1 分钟 (60s)</td>
+            <td class="num">2,211.2 MB</td>
+            <td class="num">247,474</td>
+            <td class="num">2,451,865</td>
+            <td class="num">90.8%</td>
+            <td class="num">12,106.9</td>
+            <td class="num">84.6%</td>
+          </tr>
+          <tr>
+            <td>2 分钟 (120s)</td>
+            <td class="num">2,129.7 MB</td>
+            <td class="num">237,426</td>
+            <td class="num">2,461,913</td>
+            <td class="num">91.2%</td>
+            <td class="num">12,188.4</td>
+            <td class="num">85.1%</td>
+          </tr>
+          <tr>
+            <td>3 分钟 (180s)</td>
+            <td class="num">2,105.5 MB</td>
+            <td class="num">234,572</td>
+            <td class="num">2,464,767</td>
+            <td class="num">91.3%</td>
+            <td class="num">12,212.6</td>
+            <td class="num">85.3%</td>
+          </tr>
+          <tr>
+            <td>4 分钟 (240s)</td>
+            <td class="num">2,095.3 MB</td>
+            <td class="num">233,443</td>
+            <td class="num">2,465,896</td>
+            <td class="num">91.4%</td>
+            <td class="num">12,222.8</td>
+            <td class="num">85.4%</td>
+          </tr>
+          <tr class="default">
+            <td><span class="tag">默认</span>5 分钟 (300s)</td>
+            <td class="num">2,092.0 MB</td>
+            <td class="num">233,021</td>
+            <td class="num">2,466,318</td>
+            <td class="num">91.4%</td>
+            <td class="num">12,226.1</td>
+            <td class="num">85.4%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="takeaways">
+      <div class="takeaway"><span class="mark">◆</span><span><b>1 分钟阈值已拿到绝大部分收益</b>（84.6%）。阈值越高边际收益越小：300s 与 60s 之间仅差约 119 MB（5.4%）。</span></div>
+      <div class="takeaway"><span class="mark">◆</span><span><b>五种阈值下非预期数据丢失均为 0</b>——优化不丢数据，阈值只决定"砍多少"，不决定"砍错"。</span></div>
+      <div class="takeaway"><span class="mark">◆</span><span><b>低阈值 = 更保守</b>（保留更多曾访问区块，体积更大、玩家领地更完整）；<b>高阈值 = 更激进</b>（只保留高活跃区块，体积更小）。先用 <code>--dry-run</code> 预览，再按需选档。</span></div>
+    </div>
+    <p class="source-note">数据来源：<a href="docs/real-world-backup-validation.md">docs/real-world-backup-validation.md</a>（逐字节验证，幸存 MCA 与输入一致）</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="container">
+    <h2>核心特性</h2>
+    <p class="section-sub">面向服务端运营的备份优化，把"安全"放在第一位。</p>
+    <div class="grid-6">
+      <div class="card">
+        <h3>🎯 InhabitedTime 阈值裁剪</h3>
+        <p>按玩家累计活跃时间（严格 <span class="kbd">&gt;</span>）逐区块保留；<span class="kbd">-t 0</span> 可移除从未被访问的区块。</p>
+      </div>
+      <div class="card">
+        <h3>🛡️ 强制加载保护</h3>
+        <p>自动解析并保留出生点 / 区块加载器所在区块，兼容新旧格式（<span class="kbd">chunk_tickets.dat</span> → <span class="kbd">chunks.dat</span>）。</p>
+      </div>
+      <div class="card">
+        <h3>🔒 三文件锁步</h3>
+        <p>region / entities / poi 按同一决策同步重写，杜绝"有地形无实体 / POI"的数据错位。</p>
+      </div>
+      <div class="card">
+        <h3>✂️ 惰性写入</h3>
+        <p>整区被剔除的 region 不生成空文件；幸存区块逐字节不变。</p>
+      </div>
+      <div class="card">
+        <h3>🧩 26.1+ 新格式</h3>
+        <p>兼容 <span class="kbd">dimensions/</span> 嵌套结构（PaperMC 26.1+ / Vanilla），自动递归发现维度。</p>
+      </div>
+      <div class="card">
+        <h3>🔁 merge 槽位级合并恢复</h3>
+        <p>优化备份 + 全量备份按 chunk 槽位粒度合并，patch 优先、base 填空槽；损坏 patch 自动回退 base。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="container">
+    <h2>工作原理</h2>
+    <p class="section-sub">一条可并行、可审计的优化管道。</p>
+    <div class="steps">
+      <div class="step"><span class="idx">1</span><div class="title">发现维度</div><p>递归扫描，兼容 26.1+ 的 dimensions/ 嵌套结构</p></div>
+      <div class="step"><span class="idx">2</span><div class="title">统计区块</div><p>统计全部 MCA 文件中的区块总数</p></div>
+      <div class="step"><span class="idx">3</span><div class="title">解析强制加载</div><p>chunk_tickets.dat / chunks.dat 自动探测坐标</p></div>
+      <div class="step"><span class="idx">4</span><div class="title">逐块评估</div><p>强制加载列表 + InhabitedTime 阈值联合判定保留</p></div>
+      <div class="step"><span class="idx">5</span><div class="title">锁步重写</div><p>region + entities + poi 按同一决策重写 .mca</p></div>
+      <div class="step"><span class="idx">6</span><div class="title">收尾输出</div><p>复制杂项文件 / ZIP 打包 / 原地替换 / 生成报告</p></div>
+    </div>
+    <div class="note">
+      <b>merge 槽位级合并</b>：对 base / patch 共有的 region，逐槽位按
+      <code>patch 有该槽 ? patch : base 有该槽 ? base : 空</code> 决定来源；entities / poi 与 region 锁步；
+      仅 base 存在的 region 原样复制。真实案例：18.64 GB 全量 + 2.18 GB 优化 → 约 18 GB 完整恢复。
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="container">
+    <h2>快速开始</h2>
+    <p class="section-sub">JDK 17-29 环境，一条命令构建 CLI fat JAR。</p>
+
+    <div class="codeblock">
+      <div class="codebar"><span>bash — 构建 CLI</span><button class="copy" type="button">复制</button></div>
+      <pre><code>./gradlew :app:shadowJar --no-daemon</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <div class="codebar"><span>bash — 优化备份（默认阈值 5 分钟）</span><button class="copy" type="button">复制</button></div>
+      <pre><code>java -jar app/build/libs/backup-&lt;version&gt;.jar /path/to/world /path/to/out -t 300 --zip-output</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <div class="codebar"><span>bash — merge 合并恢复（BASE=更早全量，PATCH=优化备份）</span><button class="copy" type="button">复制</button></div>
+      <pre><code>java -jar app/build/libs/backup-&lt;version&gt;.jar merge BASE PATCH OUTPUT --report --progress-mode Global</code></pre>
+    </div>
+
+    <p class="code-note">
+      提示：先用 <code>--dry-run --report</code> 预览将剔除的区块量；<code>-t 0</code> 会移除所有未被访问的区块，
+      建议保留一份全量备份以便需要时 merge 恢复。
+    </p>
+  </div>
+</section>
+
+<section id="docs">
+  <div class="container">
+    <h2>文档导航</h2>
+    <p class="section-sub">从功能梳理到真实案例分析，一站式了解。</p>
+    <div class="doc-grid">
+      <a class="doc" href="docs/FEATURES.md"><div class="t">功能点全量梳理</div><div class="d">配置模型、参数速查、CLI / 库用法（v0.2.0）</div></a>
+      <a class="doc" href="docs/real-world-backup-validation.md"><div class="t">真实世界验证报告</div><div class="d">14GB 真实世界、五档阈值对比、丢失文件分类</div></a>
+      <a class="doc" href="docs/papermc-map-backup-recovery-case.md"><div class="t">merge 真实恢复案例</div><div class="d">18.64GB 全量 + 2.18GB 优化的槽位级合并算法</div></a>
+      <a class="doc" href="docs/market-positioning-analysis.md"><div class="t">市场定位与产品化分析</div><div class="d">痛点、竞品对比与商业化方向</div></a>
+      <a class="doc" href="https://github.com/OrzMC/OrzMCBackup/blob/main/README.md"><div class="t">README</div><div class="d">快速开始、CLI 参考、作为库使用</div></a>
+      <a class="doc" href="https://github.com/OrzMC/OrzMCBackup/blob/main/CHANGELOG.md"><div class="t">CHANGELOG</div><div class="d">版本历史与变更说明</div></a>
+    </div>
+  </div>
+</section>
+
+<section style="border-bottom: none; padding-top: 24px;">
+  <div class="container">
+    <div class="cta-banner">
+      <h2>优化你的世界备份</h2>
+      <p>从 14 GB 到 2 GB，数据零非预期丢失——现在就试。</p>
+      <div class="cta-row" style="justify-content: center; margin-bottom: 0;">
+        <a class="btn btn-solid btn-lg" href="#quickstart">开始使用</a>
+        <a class="btn btn-lg" href="https://github.com/OrzMC/OrzMCBackup/releases" target="_blank" rel="noopener">下载 Release</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="badges">
+      <a href="https://github.com/OrzMC/OrzMCBackup/actions/workflows/release-lib.yml"><img src="https://github.com/OrzMC/OrzMCBackup/actions/workflows/release-lib.yml/badge.svg" alt="release-lib"></a>
+      <a href="https://github.com/OrzMC/OrzMCBackup/actions/workflows/release-app.yml"><img src="https://github.com/OrzMC/OrzMCBackup/actions/workflows/release-app.yml/badge.svg" alt="release-app"></a>
+      <a href="https://github.com/OrzMC/OrzMCBackup/actions/workflows/test-matrix.yml"><img src="https://github.com/OrzMC/OrzMCBackup/actions/workflows/test-matrix.yml/badge.svg" alt="test-matrix"></a>
+      <a href="https://codecov.io/gh/OrzMC/OrzMCBackup"><img src="https://codecov.io/gh/OrzMC/OrzMCBackup/branch/main/graph/badge.svg" alt="codecov"></a>
+      <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="license"></a>
+    </div>
+    <p>© 2026 wangzhizhou · <a href="https://github.com/OrzMC/OrzMCBackup/blob/main/LICENSE">Apache-2.0</a> · <a href="https://github.com/OrzMC/OrzMCBackup" target="_blank" rel="noopener">GitHub</a> · 致谢 <a href="https://github.com/aternosorg/thanos" target="_blank" rel="noopener">Aternos/Thanos</a></p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // 复制命令
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var code = btn.parentElement.nextElementSibling.querySelector('code');
+      var text = code.textContent.trim();
+      function done() {
+        btn.textContent = '已复制';
+        setTimeout(function () { btn.textContent = '复制'; }, 1500);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+  // 移动端菜单
+  var burger = document.querySelector('.hamburger');
+  var links = document.getElementById('navLinks');
+  if (burger) {
+    burger.addEventListener('click', function () {
+      var open = links.classList.toggle('open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    links.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () { links.classList.remove('open'); burger.setAttribute('aria-expanded', 'false'); });
+    });
+  }
+})();
+</script>
+</body>
+</html>

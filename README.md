@@ -5,6 +5,7 @@
 [![test-matrix](https://github.com/OrzMC/OrzMCBackup/actions/workflows/test-matrix.yml/badge.svg)](https://github.com/OrzMC/OrzMCBackup/actions/workflows/test-matrix.yml)
 [![codecov](https://codecov.io/gh/OrzMC/OrzMCBackup/branch/main/graph/badge.svg)](https://codecov.io/gh/OrzMC/OrzMCBackup)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-live-238636)](https://orzmc.github.io/OrzMCBackup/)
 
 > **Minecraft Java 世界优化与备份工具**：按玩家活跃时间（InhabitedTime）逐区块裁剪世界体积，
 > 让备份从 14GB 缩到 2GB，并提供优化备份与全量备份的槽位级合并恢复。
@@ -259,6 +260,8 @@ CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
 | [`docs/world-directory-structure-comparison.md`](docs/world-directory-structure-comparison.md) | 旧版/新版/原生目录结构对比 |
 | [`docs/market-positioning-analysis.md`](docs/market-positioning-analysis.md) | 市场定位、竞品与产品化分析 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本历史与变更说明 |
+
+> 🚀 产品落地页（GitHub Pages）：[orzmc.github.io/OrzMCBackup](https://orzmc.github.io/OrzMCBackup/)
 
 ---
 
