@@ -136,7 +136,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ### 5.3 错误种类
 
-独立错误常量：`ERR_MCA`、`ERR_ENTITIES`、`ERR_POI`、`ERR_ENTRIES`、`ERR_PATTERN`、`ERR_WRITE`、`ERR_WRITE_ENTITIES`、`ERR_WRITE_POI`、`ERR_FINALIZE`、`ERR_FINALIZE_ENTITIES`、`ERR_FINALIZE_POI`、`ERR_PARALLEL`
+独立错误常量：`ERR_MCA`、`ERR_ENTITIES`、`ERR_POI`、`ERR_ENTRIES`、`ERR_PATTERN`、`ERR_WRITE`、`ERR_WRITE_ENTITIES`、`ERR_WRITE_POI`、`ERR_FINALIZE`、`ERR_FINALIZE_ENTITIES`、`ERR_FINALIZE_POI`。并行失败类型为字符串字面量 `"Parallel"`（`DimensionProcessor.kt`、`WorldMerger.kt`），非常量
 
 ---
 
@@ -320,7 +320,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ## 十、文件系统抽象（`FileSystem`）
 
-### 9.1 接口方法（15 个）
+### 9.1 接口方法（14 个）
 
 `isDirectory`、`isRegularFile`、`createTempDirectory`、`exists`、`list`、`walk`、`createDirectories`、`deleteIfExists`、`copy`、`write`、`read`、`size`、`deleteTreeWithRetry`、`toRealPath`
 
