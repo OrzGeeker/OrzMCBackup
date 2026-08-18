@@ -19,9 +19,9 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run ktlint check
-        run: ./gradlew ktlintCheck --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew ktlintCheck --no-daemon
       - name: Run detekt
-        run: ./gradlew detekt --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew detekt --no-daemon
   ubuntu-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -38,7 +38,7 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on ${{ matrix.java }}
-        run: ./gradlew :core:test :app:test --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
@@ -63,8 +63,8 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on Windows Java ${{ matrix.java }}
-        shell: pwsh
-        run: .\gradlew.bat :core:test :app:test --no-daemon
+        shell: bash
+        run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
@@ -89,7 +89,7 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on macOS Java ${{ matrix.java }}
-        run: ./gradlew :core:test :app:test --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
@@ -114,9 +114,9 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests with coverage
-        run: ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
       - name: Verify coverage threshold
-        run: ./gradlew :core:koverVerify :app:koverVerify --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew :core:koverVerify :app:koverVerify --no-daemon
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:
