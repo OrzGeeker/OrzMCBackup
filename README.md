@@ -6,86 +6,177 @@
 [![codecov](https://codecov.io/gh/OrzMC/OrzMCBackup/branch/main/graph/badge.svg)](https://codecov.io/gh/OrzMC/OrzMCBackup)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-Kotlin/Gradle 独立工程，提供 Minecraft Java 世界优化功能：扫描各维度的 region/entities/poi MCA 文件，根据 InhabitedTime
-阈值、强制加载列表（支持新旧格式）或矩形范围保留区块并重写输出，同时支持进度与可选压缩输出。
+> **Minecraft Java 世界优化与备份工具**：按玩家活跃时间（InhabitedTime）逐区块裁剪世界体积，
+> 让备份从 14GB 缩到 2GB，并提供优化备份与全量备份的槽位级合并恢复。
 
-## 快速开始（CLI）
-1. 构建可执行 JAR：
-  ```bash
-  ./gradlew :app:shadowJar --no-daemon
-  ```
-2. 产物位置：app/build/libs/backup-<version>.jar（版本由根项目统一注入）
-3. 运行示例：
-  ```bash
-  # 指定输入与输出目录
-  java -jar app/build/libs/backup-0.2.0.jar /path/to/world /path/to/out -t 600 --zip-output
-  # 原地处理（覆盖输入目录）
-  java -jar app/build/libs/backup-0.2.0.jar /path/to/world --in-place --progress-mode global
-  # 写入报告文件（JSON 或 CSV）
-  java -jar app/build/libs/backup-0.2.0.jar /path/to/world /path/to/out -t 0 --report-file /tmp/report.json --report-format json
-  ```
+CLI 工具 + Kotlin/Java 库双形态，支持 PaperMC 26.1+ 新世界格式，专注**数据安全**（强制加载保护、
+entities/poi 锁步、零非预期丢失）。
 
-### CLI 参数
+---
 
-- WORLD_DIR：世界根目录
-- OUTPUT_DIR：输出目录（可选；非原地模式时必须为空，除非使用 --force 清空覆盖）
-- -t, --inhabited-time-seconds：InhabitedTime 阈值（秒，1 秒=20 tick，默认 300）
-- --remove-unknown：将未知/外部压缩的区块视为可删除
-- --progress-mode：Off | Global | Region（默认 Region）
-- --in-place：原地处理，忽略输出目录并替换输入目录
-- --zip-output：将输出目录打包为时间戳 zip 并删除目录
-- -f, --force：覆盖已存在且非空的输出目录（无交互）
-- --strict：严格模式，遇到损坏的 MCA 或解析失败时返回非零退出码
-- --report：在标准输出打印处理统计与错误列表
-- --report-file：将报告写入文件（支持 JSON/CSV）
-- --report-format：json | csv（默认 json）
-- --progress-interval：进度回调的区块粒度（默认 1000）
-- --progress-interval-ms：进度回调的时间粒度，>0 时优先使用（默认 0）
-- --parallelism：并行处理维度的线程数（默认 1）
-- --copy-misc：非原地模式下，复制维度目录及 world 级目录中除 region/entities/poi 以外的文件与文件夹（默认 true；支持 --copy-misc=false 或 --no-copy-misc）。26.1+ 结构下，无论输入是服务器根目录还是 world 目录，都会正确复制 world 级别的杂项文件（`level.dat`、`data/`、`players/` 等）
-- --dry-run：预览模式，只扫描统计不写入任何输出（默认 false）
+## 目录
 
-### merge 子命令（槽位级合并优化备份与全量备份）
+- [为什么需要](#为什么需要)
+- [核心特性](#核心特性)
+- [快速开始](#快速开始)
+- [CLI 参考](#cli-参考)
+- [作为库使用](#作为库使用)
+- [支持的格式与 Minecraft 版本](#支持的格式与-minecraft-版本)
+- [工作原理](#工作原理)
+- [文档导航](#文档导航)
+- [测试与质量](#测试与质量)
+- [构建与发布](#构建与发布)
+- [Agent 协作开发](#agent-协作开发)
+- [贡献 / 安全 / 许可](#贡献--安全--许可)
 
-当仅剩"优化备份 + 更早全量备份"两份数据时，可用 `merge` 以 chunk 槽位粒度合并，恢复"全量最新"地图
-（patch 槽位优先、base 填充空槽、entities/poi 锁步），避免同名文件覆盖导致的地图空洞/地形回退。
+---
+
+## 为什么需要
+
+Minecraft 区块一旦生成就不会自动消失。玩家探索、跑图、飞行会永久生成大量"路过但从未建设"的区块，
+世界体积持续膨胀——备份存储成本随之失控。
+
+**OrzMCBackup 在备份前逐区块裁剪低活跃区块**，实测效果（真实 PaperMC 26.1+ 世界，14.3GB / 21,692 个 `.mca`）：
+
+| 项目 | 数值 |
+|------|------|
+| 备份前 | 14,318 MB（约 14 GB） |
+| 优化备份后（`-t 300`） | **2,092 MB（-85.4%）** |
+| 剔除区块 | **91.4%**（2,466,318 / 2,699,339） |
+| 非预期丢失文件 | **0**（逐字节验证） |
+
+> 更小的体积 = 更低的存储成本 + 更快的备份/恢复 + 更高频的备份保留策略。
+> 真实验证报告见 [`docs/real-world-backup-validation.md`](docs/real-world-backup-validation.md)。
+
+**当仅剩"优化备份 + 更早全量备份"时**，直接同名覆盖会造成地图空洞/地形回退。`merge` 子命令以
+**chunk 槽位粒度**合并，恢复"全量最新"地图——真实案例：18.64GB 全量 + 2.18GB 优化 → ~18GB 完整恢复，
+见 [`docs/papermc-map-backup-recovery-case.md`](docs/papermc-map-backup-recovery-case.md)。
+
+---
+
+## 核心特性
+
+- **InhabitedTime 阈值裁剪**：按玩家累计活跃时间（严格 `>`）保留区块，`-t 0` 可移除从未被访问的区块
+- **强制加载保护**：自动解析并保留出生点/区块加载器所在区块，支持新旧两种格式
+  （`chunk_tickets.dat` → `chunks.dat`）
+- **三文件锁步**：region / entities / poi 按同一决策同步重写，杜绝"有地形无实体/POI"的数据错位
+- **惰性写入**：整区被剔除的 region 不生成空文件；保留区逐字节不变
+- **26.1+ 新格式支持**：兼容 `dimensions/` 嵌套结构（PaperMC 26.1+ / Vanilla）
+- **多种输出模式**：输出到新目录、原地替换、ZIP 打包、dry-run 预览、杂项文件复制
+- **merge 合并恢复**：优化备份 + 全量备份的槽位级合并（生态独有能力）
+- **可脚本化**：无头 CLI + JSON/CSV 报告 + 进度 + 并行处理，适合 CRON / 面板 / 托管自动备份
+- **双形态**：CLI fat JAR + Maven Central 库（Kotlin DSL / Java 均可调用）
+
+---
+
+## 快速开始
+
+### 构建
 
 ```bash
-# 构建
 ./gradlew :app:shadowJar --no-daemon
-# 合并（BASE=更早全量备份，PATCH=优化备份，OUTPUT=恢复结果）
-java -jar app/build/libs/backup.jar merge E:\recover\world E:\recover\world_backup E:\recover\world_recovered \
+```
+
+产物：`app/build/libs/backup-<version>.jar`。本地默认版本为 `0.1.0`；CI 发布时按 tag 注入
+（如 `v0.2.0` 对应 `backup-0.2.0.jar`）。以下示例用 `<version>` 指代。
+
+### 优化备份
+
+```bash
+# 指定输入与输出目录，按 5 分钟活跃阈值裁剪
+java -jar app/build/libs/backup-<version>.jar /path/to/world /path/to/out -t 300 --zip-output
+
+# 原地处理（替换输入目录）
+java -jar app/build/libs/backup-<version>.jar /path/to/world --in-place --progress-mode global
+
+# 预览模式（只统计不写入）
+java -jar app/build/libs/backup-<version>.jar /path/to/world --dry-run --report
+
+# 报告写入文件（JSON）
+java -jar app/build/libs/backup-<version>.jar /path/to/world /path/to/out -t 0 \
+  --report-file /tmp/report.json --report-format json
+```
+
+### merge 合并恢复（优化备份 + 更早全量备份）
+
+```bash
+# BASE=更早全量备份，PATCH=优化备份，OUTPUT=恢复结果
+java -jar app/build/libs/backup-<version>.jar merge E:\recover\world E:\recover\world_backup E:\recover\world_recovered \
   --report --progress-mode Global
 ```
 
-merge 子命令参数：
+> **务必先备份**。`-t 0` 会移除所有未被访问区块；优化是不可逆裁剪，建议保留全量备份以防需要 merge 恢复。
+> 首次使用建议先 `--dry-run --report` 预览将剔除的区块量。
 
-- BASE / PATCH / OUTPUT：三个位置参数（全量备份 / 优化备份 / 输出目录）
-- -f, --force：覆盖已存在且非空的输出目录（无交互）
-- --progress-mode / --progress-interval：进度选项（同 backup）
-- --parallelism：并行合并 region 文件的线程数（默认 1，即顺序执行；>1 时各 region 独立写文件，输出仍逐字节确定）
-- --report：在标准输出打印合并统计与错误列表
-- --report-file / --report-format：报告写入文件（json | csv）
+---
 
-作为库使用时，可用 `WorldMerger.run(MergeRequest)` 直接复用同一合并算法（见下文"作为库使用"）。
+## CLI 参考
 
-详细背景、算法与验收方法见 [docs/papermc-map-backup-recovery-case.md](docs/papermc-map-backup-recovery-case.md)。
+### `backup` 命令
+
+```text
+java -jar backup-<version>.jar WORLD_DIR [OUTPUT_DIR] [options]
+```
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `WORLD_DIR` | — | 世界根目录（必填） |
+| `OUTPUT_DIR` | — | 输出目录（可选；非原地模式必须为空，除非 `--force`） |
+| `-t`, `--inhabited-time-seconds` | `300` | InhabitedTime 阈值（秒，1 秒 = 20 tick） |
+| `--remove-unknown` | `false` | 将未知/外部压缩的区块视为可删除 |
+| `--progress-mode` | `Region` | 进度模式：`Off` / `Global` / `Region` |
+| `--in-place` | `false` | 原地处理，替换输入目录 |
+| `--zip-output` | `false` | 输出目录打包为时间戳 zip 并删除目录 |
+| `-f`, `--force` | `false` | 覆盖已存在且非空的输出目录（无交互） |
+| `--strict` | `false` | 严格模式：出错时返回非零退出码 |
+| `--report` | `false` | 标准输出打印处理统计与错误列表 |
+| `--report-file` | `null` | 报告写入文件（JSON/CSV） |
+| `--report-format` | `json` | 报告格式：`json` / `csv` |
+| `--progress-interval` | `1000` | 进度回调的区块粒度 |
+| `--progress-interval-ms` | `0` | 进度回调的时间粒度，>0 时优先 |
+| `--parallelism` | `1` | 并行线程数（同时驱动维度级与区域级并行） |
+| `--copy-misc` | `true` | 复制非 MCA 杂项文件（`level.dat`、`players/`、`data/` 等；`--no-copy-misc` 关闭） |
+| `--dry-run` | `false` | 预览模式，只扫描统计不写入 |
+
+### `merge` 命令
+
+```text
+java -jar backup-<version>.jar merge BASE PATCH OUTPUT [options]
+```
+
+以 chunk 槽位粒度合并（patch 优先、base 填空槽、entities/poi 锁步），恢复"全量最新"地图。
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `BASE` / `PATCH` / `OUTPUT` | — | 全量备份 / 优化备份 / 输出目录（三目录必须互不重叠） |
+| `-f`, `--force` | `false` | 覆盖已存在且非空的输出目录 |
+| `--progress-mode` | `Off` | 进度模式：`Off` / `Global` / `Region` |
+| `--parallelism` | `1` | 并行合并 region 的线程数（>1 时输出仍逐字节确定） |
+| `--progress-interval` | `1000` | 进度回调的文件粒度 |
+| `--report` | `false` | 标准输出打印合并统计 |
+| `--report-file` / `--report-format` | `null` / `json` | 报告写文件（`json` / `csv`） |
+
+### 退出码
+
+| 命令 | 退出码 0 | 退出码 1 |
+|------|----------|----------|
+| `backup` | 处理完成且无错误 | `--strict` 且存在错误；或抛出 `OptimizeException` / 其他异常 |
+| `merge` | 合并完成且无错误 | 存在任何错误（merge 无 `--strict`，任一错误即失败） |
+
+---
 
 ## 作为库使用
-- [公共Maven仓库发布地址](https://repo1.maven.org/maven2/io/github/wangzhizhou/backup-core/)
-- 发布到本地 Maven 仓库：
-  ```bash
-  ./gradlew :core:publishToMavenLocal --no-daemon
-  ```
-- 依赖声明：
-  ```kotlin
-  dependencies {
-      implementation("io.github.wangzhizhou:backup-core:<version>")
-  }
-  ```
 
-### Kotlin DSL（推荐）
-最小化示例（默认值）：
+发布到 Maven Central（`io.github.wangzhizhou:backup-core`），支持 Kotlin DSL 与 Java。
+
+```kotlin
+dependencies {
+    implementation("io.github.wangzhizhou:backup-core:<version>")
+}
+```
+
+**最小示例（Kotlin DSL）**：
+
 ```kotlin
 import com.jokerhub.orzmc.world.*
 import java.nio.file.Paths
@@ -96,329 +187,121 @@ fun minimal() {
 }
 ```
 
-进阶示例（更短 DSL + 自动补全扩展名）：
+**结构化配置（`OptimizerRequest`）**：
+
 ```kotlin
-import com.jokerhub.orzmc.world.*
-import java.nio.file.Paths
-
-fun advanced() {
-    val report = Optimizer.run(Paths.get("/path/to/world"), Paths.get("/path/to/out")) {
-        inhabitedThresholdSeconds = 0
-        strict = true
-        inPlace = false
-        zipOutput = true
-        progressSink = { e -> println(e) }
-        reportFormat = "csv"
-        reportSink = "/path/to/report"
-    }
-    println(ReportIO.toJson(report))
-}
+val request = OptimizerRequest(
+    input = Paths.get("/path/to/world"),
+    output = Paths.get("/path/to/out"),
+    filter = FilterOptions(inhabitedThresholdSeconds = 600, removeUnknown = false, strict = false),
+    outputOptions = OutputOptions(inPlace = false, zipOutput = true, force = true, copyMisc = true, dryRun = false),
+    progress = ProgressOptions(interval = 500, intervalMs = 0, sink = CallbackProgressSink { e -> println(e) }),
+    runtime = RuntimeOptions(parallelism = 2),
+    hooks = Hooks(onError = { e -> println("Error: $e") }, reportSink = FileReportSink(Paths.get("/tmp/report.json"), "json")),
+    io = IOOptions(fs = RealFileSystem, ioFactory = DefaultMcaIOFactory()),
+)
+val report = Optimizer.run(request)
 ```
 
-### Kotlin 结构化配置
-```kotlin
-import com.jokerhub.orzmc.world.*
-import java.nio.file.Paths
+**merge 复用（`WorldMerger`）**：`WorldMerger.run(MergeRequest)` 与 CLI `merge` 使用完全相同的
+槽位级合并算法；`MergeReportIO.write(report, path, format)` 无损落盘 JSON/CSV。
 
-fun structured() {
-    val request = OptimizerRequest(
-        input = Paths.get("/path/to/world"),
-        output = Paths.get("/path/to/out"),
-        filter = FilterOptions(
-            inhabitedThresholdSeconds = 600,
-            removeUnknown = true,
-            strict = false
-        ),
-        outputOptions = OutputOptions(
-            inPlace = false,
-            zipOutput = true,
-            force = true,
-            copyMisc = true
-        ),
-        progress = ProgressOptions(
-            interval = 500,
-            intervalMs = 0,
-            sink = CallbackProgressSink { e -> println(e) }
-        ),
-        runtime = RuntimeOptions(parallelism = 2),
-        hooks = Hooks(
-            onError = { e -> println("Error: $e") },
-            reportSink = FileReportSink(Paths.get("/path/to/report.json"), "json")
-        ),
-        io = IOOptions(
-            fs = RealFileSystem,
-            ioFactory = DefaultMcaIOFactory()
-        )
-    )
-    val report = Optimizer.run(request)
-    println(ReportIO.toJson(report))
-}
-```
+> 完整配置模型、参数速查与全部示例见 [`docs/FEATURES.md`](docs/FEATURES.md)。Java 用法与旧版
+> `OptimizerConfig` 迁移说明亦在其中。
 
-### Java 调用（不使用 DSL）
-完整示例：
-```java
-import com.jokerhub.orzmc.world.*;
-import java.nio.file.Paths;
+---
 
-public class JavaExample {
-    public static void main(String[] args) {
-        OptimizerRequest request = new OptimizerRequest(
-            Paths.get("/path/to/world"),
-            Paths.get("/path/to/out"),
-            new FilterOptions(600, false, false),
-            new OutputOptions(false, true, true, true),
-            new ProgressOptions(1000L, 0L, new CallbackProgressSink(e -> System.out.println(e))),
-            new RuntimeOptions(2),
-            new Hooks(
-                e -> System.out.println("Error: " + e),
-                new FileReportSink(Paths.get("/path/to/report.json"), "json"),
-                null
-            ),
-            new IOOptions(RealFileSystem.INSTANCE, new DefaultMcaIOFactory())
-        );
-        OptimizeReport report = Optimizer.run(request);
-        System.out.println(ReportIO.toJson(report));
-    }
-}
-```
-
-最小化示例：
-```java
-import com.jokerhub.orzmc.world.*;
-import java.nio.file.Paths;
-
-public class JavaMinimal {
-    public static void main(String[] args) {
-        OptimizerRequest request = new OptimizerRequest(
-            Paths.get("/path/to/world"),
-            Paths.get("/path/to/out"),
-            new FilterOptions(),
-            new OutputOptions(),
-            new ProgressOptions(),
-            new RuntimeOptions(),
-            new Hooks(),
-            new IOOptions()
-        );
-        OptimizeReport report = Optimizer.run(request);
-        System.out.println(ReportIO.toJson(report));
-    }
-}
-```
-
-reportSink 自动补全示例：
-```java
-import com.jokerhub.orzmc.world.*;
-import java.nio.file.Paths;
-
-public class JavaReportSinkAuto {
-    public static void main(String[] args) {
-        OptimizerRequestBuilder builder = new OptimizerRequestBuilder(
-            Paths.get("/path/to/world"),
-            Paths.get("/path/to/out")
-        );
-        builder.reportFormat = "csv";
-        builder.reportSink = "/path/to/report";
-        OptimizeReport report = Optimizer.run(builder.build());
-        System.out.println(ReportIO.toJson(report));
-    }
-}
-```
-
-### merge 复用（WorldMerger）
-`WorldMerger.run(MergeRequest)` 与 `MergeCommand` 使用完全相同的槽位级合并算法，可在代码中直接复用：
-```kotlin
-import com.jokerhub.orzmc.world.*
-import java.nio.file.Paths
-
-fun mergeWorlds() {
-    val report =
-        WorldMerger.run(
-            MergeRequest(
-                base = Paths.get("/path/to/full-backup"),
-                patch = Paths.get("/path/to/optimized-backup"),
-                output = Paths.get("/path/to/recovered"),
-                outputOptions = OutputOptions(force = true),
-                runtime = RuntimeOptions(parallelism = 4),
-            ),
-        )
-    MergeReportIO.write(report, Paths.get("/path/to/merge-report.json"), "json")
-    println(MergeReportIO.toText(report))
-}
-```
-
-Java 用法：
-```java
-import com.jokerhub.orzmc.world.*;
-import java.nio.file.Paths;
-
-public class MergeExample {
-    public static void main(String[] args) {
-        MergeRequest request = new MergeRequest(
-            Paths.get("/path/to/full-backup"),
-            Paths.get("/path/to/optimized-backup"),
-            Paths.get("/path/to/recovered"),
-            new OutputOptions(false, false, true, true, false), // force = true
-            new ProgressOptions(1000L, 0L, new CallbackProgressSink(e -> System.out.println(e))),
-            new RuntimeOptions(4),
-            new Hooks(null, null, null),
-            new IOOptions(RealFileSystem.INSTANCE, new DefaultMcaIOFactory())
-        );
-        MergeReport report = WorldMerger.run(request);
-        MergeReportIO.write(report, Paths.get("/path/to/merge-report.json"), "json");
-        System.out.println(MergeReportIO.toText(report));
-    }
-}
-```
-
-**merge 与 optimize 的 reportSink 差异**：`Hooks.reportSink` 的类型是 `ReportSink`，合并时 `WorldMerger` 通过
-`MergeReportIO.toOptimizeReport` 映射为 `OptimizeReport` 后写入——该映射是**有损**的（`processedChunks`/`removedChunks`
-实为 patch/base 槽位计数）。需要无损的完整 `MergeReport`（含 `linkedEntities`/`linkedPoi`/`overlayFiles`）时，
-直接用 `MergeReportIO.write(report, path, format)` 写 JSON/CSV。
-
-### 迁移旧版 OptimizerConfig 到新 DSL
-- input/output → Optimizer.run(input, output) 或 OptimizerRequest(input/output)
-- inhabitedThresholdSeconds → inhabitedThresholdSeconds 或 filter.inhabitedThresholdSeconds
-- removeUnknown → removeUnknown 或 filter.removeUnknown
-- zipOutput → zipOutput 或 outputOptions.zipOutput
-- inPlace → inPlace 或 outputOptions.inPlace
-- force → force 或 outputOptions.force
-- strict → strict 或 filter.strict
-- progressInterval → progressInterval 或 progress.interval
-- progressIntervalMs → progressIntervalMs 或 progress.intervalMs
-- onError → onError { } 或 hooks.onError
-- onProgress → progressSink = { } / onProgress { } 或 progress.sink
-- parallelism → parallelism 或 runtime.parallelism
-- copyMisc → copyMisc 或 outputOptions.copyMisc
-- progressSink → progressSink 或 progress.sink
-- reportSink → reportSink/reportFormat 或 hooks.reportSink
-- fs → fs 或 io.fs
-- ioFactory → ioFactory 或 io.ioFactory
-- metricsSink → metricsSink 或 hooks.metricsSink
-
-### 参数速查（新 DSL）
-- input/output：输入与输出路径；原地模式下 output 可空
-- inhabitedThresholdSeconds/removeUnknown/strict：过滤规则
-- zipOutput/inPlace/force/copyMisc：输出策略与杂项复制
-- progressInterval/progressIntervalMs：进度回调节流
-- progressSink/onProgress：进度回调入口
-- parallelism：并行维度处理的线程数
-- reportSink/reportFormat：报告输出位置与格式（reportSink 允许 Path/String，省略扩展名时自动补齐）
-- fs/ioFactory/metricsSink/onError：IO、指标与错误回调
-- 分组配置：filter/outputOptions/progress/runtime/hooks/io
-
-## 测试
-```bash
-./gradlew :core:test :app:test --no-daemon   # 单元 + 集成测试
-./gradlew :core:koverVerify :app:koverVerify # 覆盖率门槛（core ≥75%、app ≥50%）
-./gradlew ktlintCheck detekt                 # 静态检查
-```
-
-- 测试数据：Fixtures 目录纳入版本控制（位置：core/src/test/resources/Fixtures），示例文件：
-    - Fixtures/world/region/r.0.0.mca
-    - Fixtures/world/data/chunks.dat
-    - Fixtures/merge/base/ 与 Fixtures/merge/patch/：真实 Anvil 格式合并夹具对（`RealMcaMergeTest` 使用，可用 `python tools/gen_merge_fixtures.py` 重新生成）
-
-## 支持的压缩格式与 Minecraft 版本
+## 支持的格式与 Minecraft 版本
 
 ### 区块数据压缩格式
-- 区块数据压缩：RAW、ZLIB、GZIP、LZ4（LZ4Block）
-- LZ4 校验：使用 xxhash seed 0x9747b28c 并按 0x0FFFFFFF 掩码比较，校验失败会抛出错误
-- 外部压缩（External*）条目：根据 --remove-unknown 决定是否保留
 
-### 世界格式支持
-- **标准格式（Minecraft 1.2.1+）：** 维度目录直接包含 `region/`、`entities/`、`poi/`
-- **26.1+ 格式（Minecraft 26w+）：** 维度嵌套在 `dimensions/minecraft/<dimension>/` 下，自动递归发现
-- **强制加载区块：** 同时支持 `data/minecraft/chunk_tickets.dat`（新格式）和 `data/chunks.dat`（旧格式），自动按优先级尝试
-- **InhabitedTime 阈值：** 使用严格大于（`>`）比较；设置 `-t 0` 可移除未曾访问（`InhabitedTime == 0`）的区块
+| 压缩 | 说明 |
+|------|------|
+| `RAW` / `ZLIB` / `GZIP` / `LZ4` | 标准区块压缩；LZ4 使用 xxhash（seed `0x9747b28c`，掩码 `0x0FFFFFFF`）校验 |
+| `External*`（外部存储） | 由 `--remove-unknown` 决定是否保留 |
 
-## 项目结构
+### 世界格式
 
-```text
-OrzMCBackup/
-├─ app/                       # CLI 模块
-│  ├─ build.gradle.kts
-│  └─ src/main/kotlin/com/jokerhub/orzmc/cli/
-│     ├─ Main.kt               # backup 命令 + 子命令分发（dispatch）
-│     └─ MergeCommand.kt       # merge 子命令
-├─ core/                      # 核心库模块
-│  ├─ build.gradle.kts
-│  └─ src/
-│     ├─ main/kotlin/com/jokerhub/orzmc/
-│     │  ├─ mca/Reader/Writer/Entry
-│     │  ├─ patterns/ChunkPattern/InhabitedTime/List
-│     │  └─ world/Optimizer/WorldMerger/MergeReportIO/NbtForceLoader
-│     └─ test/resources/Fixtures/   # 提交的测试样本（含 merge/ 真实 .mca 夹具对）
-├─ .github/workflows/         # CI 工作流
-│  ├─ test-matrix.yml         # 测试矩阵（Java 17/21/25 × 3 平台）
-│  ├─ release-lib.yml         # 发布库到 Maven Central
-│  └─ release-app.yml         # 发布 CLI 可执行 JAR
-├─ gradle/wrapper/
-│  └─ gradle-wrapper.properties
-├─ gradlew / gradlew.bat
-├─ settings.gradle.kts
-├─ build.gradle.kts
-├─ gradle.properties
-└─ README.md
+- **标准格式（1.2.1+）**：维度目录直接包含 `region/`、`entities/`、`poi/`
+- **26.1+ 格式（PaperMC 26.1+ / Vanilla）**：维度嵌套在 `dimensions/minecraft/<dim>/`，自动递归发现
+- **强制加载区块**：按优先级自动探测 `data/minecraft/chunk_tickets.dat`（新版）与 `data/chunks.dat`（旧版）
+- **InhabitedTime 语义**：严格大于（`>`）比较；`-t 0` 移除从未被访问的区块
+
+---
+
+## 工作原理
+
+```
+CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
+  → 发现维度（递归，兼容 26.1+ 的 dimensions/ 结构）
+  → 统计所有 MCA 文件中的总区块数
+  → 按维度逐个处理（串行或并行）：
+      解析强制加载坐标（chunk_tickets.dat / chunks.dat 自动探测）
+      对每个区块评估保留模式（ListPattern 强制加载 + InhabitedTimePattern 阈值）
+      匹配 → 重写 region + entities + poi .mca（三文件锁步）
+  → 复制杂项文件 / ZIP 打包 / 原地替换
+  → 输出 OptimizeReport（JSON / CSV / 文本）
 ```
 
-## 构建环境与配置
-- Gradle Wrapper：**9.7.0**（Kotlin 2.4.10 / Shadow 9.6.1 兼容）
-- Wrapper 配置位置：[gradle/wrapper/gradle-wrapper.properties](gradle/wrapper/gradle-wrapper.properties)
-- Wrapper 缓存：使用 GRADLE_USER_HOME（用户主目录）
-- 插件版本与仓源统一在根项目声明：[gradle/libs.versions.toml](gradle/libs.versions.toml)
+**merge 槽位级合并**：对 base/patch 共有的 region，逐槽位 `patch 有该槽 ? patch : base 有该槽 ? base : 空`
+决定来源；entities/poi 与 region 锁步；仅 base 存在的 region 原样复制；损坏 patch 回退 base，保证不丢数据。
 
-- 所有模块的 group 与 version 由根项目统一注入（支持 CI 通过 -Pversion 传入）
-- **JDK 要求**：Java 17+（JUnit 6.1.3 最低要求）
-- CI 测试矩阵：Java 17 / 21 / 25 × ubuntu / macos / windows
-- CI lint/coverage：JDK 25
+---
 
-## 发布到 Maven Central（Publisher Portal 原生）
-- 本地生成可上传 bundle：
-  ```bash
-  ./gradlew :core:portalBundle --no-daemon -Pversion=0.1.0 \
-    -Psigning.keyId=<KEY_ID> -Psigning.password=<PASSWORD> -Psigning.key=<KEY_BASE64_OR_ASCII>
-  # 产物：core/build/portal-bundle.zip
-  ```
-- GitHub Actions 工作流：[release-lib.yml](.github/workflows/release-lib.yml)
-  - 触发：push 标签 vX.Y.Z 或手动 workflow_dispatch
-  - 版本：VERSION=${GITHUB_REF_NAME#v} 或 inputs.version
-  - JDK：Temurin 25（构建用，产物目标 Java 17）
-  - 流程：运行 :core:test/:app:test → :core:portalBundle → 生成 sha256 → 校验签名与包 → 上传 Portal
-  - 上传：Bearer Token（Authorization: Bearer $CENTRAL_TOKEN）
-- 仓库 Secrets：
-  - CENTRAL_TOKEN：Central Portal 用户令牌
-  - CENTRAL_PORTAL_UPLOAD_URL：Portal 上传端点 URL
-  - SIGNING_KEY_ID / SIGNING_KEY / SIGNING_PASSWORD：GPG 签名机密（SIGNING_KEY 可为 base64 或 ASCII 装甲）
-- SIGNING_KEY 生成示例：
-  ```bash
-  gpg --armor --export-secret-keys <KEY_ID_OR_FINGERPRINT> | base64
-  ```
-- 签名参数说明：
-  - signing.key：支持 base64 或原始 ASCII 装甲私钥，构建时自动解码
-  - signing.keyId：支持 8 位短 ID 或 40 位指纹（会归一化为 8 位大写）
-  - signing.password：若私钥有口令则必填
+## 文档导航
 
-## POM 元数据与签名
-- 配置位置：[core/build.gradle.kts](core/build.gradle.kts)
-- POM 信息：
-  - name：OrzMC Backup Core
-  - description：Core library for optimizing Minecraft Java worlds
-  - url：https://github.com/OrzMC/OrzMCBackup
-  - license：Apache License 2.0（https://www.apache.org/licenses/LICENSE-2.0）
-  - developer：id=orzmc，name=wangzhizhou，email=824219521@qq.com
-  - scm：
-    - url：https://github.com/OrzMC/OrzMCBackup
-    - connection：scm:git:https://github.com/OrzMC/OrzMCBackup.git
-    - developerConnection：scm:git:ssh://git@github.com/OrzMC/OrzMCBackup.git
-- 产物与签名：
-  - sourcesJar：withSourcesJar
-  - javadocJar：Dokka 生成后打包
-  - signing：使用 signing.keyId/signing.key/signing.password（key 支持 base64 或原始 ASCII 装甲）
-- 工作流：
-  - 发布库：[release-lib.yml](.github/workflows/release-lib.yml)
-  - 发布 App：[release-app.yml](.github/workflows/release-app.yml)
+| 文档 | 内容 |
+|------|------|
+| [`docs/FEATURES.md`](docs/FEATURES.md) | 功能点全量梳理、配置模型、参数速查（v0.2.0） |
+| [`docs/papermc-map-backup-recovery-case.md`](docs/papermc-map-backup-recovery-case.md) | merge 真实案例、算法与三重验收方法 |
+| [`docs/real-world-backup-validation.md`](docs/real-world-backup-validation.md) | 真实世界备份验证、阈值对比、丢失文件分类 |
+| [`docs/paper-26.1-world-migration-report.md`](docs/paper-26.1-world-migration-report.md) | 26.1+ 目录结构迁移分析 |
+| [`docs/world-directory-structure-comparison.md`](docs/world-directory-structure-comparison.md) | 旧版/新版/原生目录结构对比 |
+| [`docs/market-positioning-analysis.md`](docs/market-positioning-analysis.md) | 市场定位、竞品与产品化分析 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本历史与变更说明 |
 
-## 许可与致谢
+---
 
-- Apache-2.0；感谢社区与原实现的启发与样例支持
+## 测试与质量
+
+- **CI 矩阵**：JDK 17 / 21 / 25 × Ubuntu / macOS / Windows（[`test-matrix.yml`](.github/workflows/test-matrix.yml)）
+- **覆盖率门槛**：core ≥ 75%、app ≥ 50%（Kover，CI 强制，报告上传 CodeCov）
+- **静态分析**：ktlint + detekt（根 [`detekt.yml`](detekt.yml)）
+- **测试策略**：`MemoryFS` + `MemoryMcaIOFactory` 内存端到端 + 真实 MCA 夹具 + merge 真实夹具对
+  （`Fixtures/merge/`，可用 `python tools/gen_merge_fixtures.py` 重新生成）
+
+```bash
+./gradlew :core:test :app:test --no-daemon   # 全部测试
+./gradlew ktlintCheck detekt --no-daemon     # 代码风格与静态分析
+```
+
+---
+
+## 构建与发布
+
+- **环境**：Gradle Wrapper `9.7.0`；JDK **17-29**（构建脚本阻止 30+）；产物目标 Java 17
+- **版本管理**：根 `build.gradle.kts` + `gradle/libs.versions.toml` 统一注入；`-Pversion=X.Y.Z` 覆盖
+- **本地构建 CLI**：`./gradlew :app:shadowJar --no-daemon`
+- **库发布**：`./gradlew :core:portalBundle -Pversion=X.Y.Z -Psigning.keyId=... -Psigning.password=... -Psigning.key=...`
+  生成 `core/build/portal-bundle.zip`（含 GPG 签名 + sources + javadoc），上传 Maven Central Publisher Portal
+- **GitHub Actions**：`release-app.yml` 发布 CLI 到 GitHub Release；`release-lib.yml` 发布库到 Maven Central；
+  两者使用 **Temurin 21** 构建（lint/coverage 用 JDK 25）
+
+---
+
+## Agent 协作开发
+
+仓库支持主流 AI Agent 工具（Claude Code、Codex、pi.dev、Grok、Gemini CLI、Cursor 等）开箱协作：
+
+- **[`AGENTS.md`](AGENTS.md)** — 跨工具单一事实源：项目结构、常用命令、设计决策、协作规则、文档同步铁律
+- **[`CLAUDE.md`](CLAUDE.md)** / **[`GEMINI.md`](GEMINI.md)** — 各家薄壳入口（引用 AGENTS.md）
+- **`.agents/skills/`** — 可移植技能（Agent Skills Standard）：`build-cli`、`test`、`lint-fix`、`update-docs`
+
+---
+
+## 贡献 / 安全 / 许可
+
+- 参与开发：[`CONTRIBUTING.md`](CONTRIBUTING.md)
+- 安全问题：[`SECURITY.md`](SECURITY.md)
+- 许可：[Apache-2.0](LICENSE)。感谢社区与原实现（[Aternos/Thanos](https://github.com/aternosorg/thanos)）
+  的启发与样例支持
