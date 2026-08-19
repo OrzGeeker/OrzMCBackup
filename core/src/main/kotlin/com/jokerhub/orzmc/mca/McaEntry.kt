@@ -26,7 +26,7 @@ class McaEntry(
     private val regionZ: Int,
 ) {
     /** Compression methods used in Minecraft region files. */
-    enum class CompressionMethod { GZIP, ZLIB, RAW, LZ4, CUSTOM, EXT_GZIP, EXT_ZLIB, EXT_RAW, EXT_LZ4 }
+    enum class CompressionMethod { GZIP, ZLIB, RAW, LZ4, CUSTOM, EXT_GZIP, EXT_ZLIB, EXT_RAW, EXT_LZ4, UNKNOWN }
 
     /** Index within the sector table (0-1023). Maps to (x = index % 32, z = index / 32) within the region. */
     fun regionIndex(): Int = index
@@ -63,7 +63,9 @@ class McaEntry(
                 -126 -> CompressionMethod.EXT_ZLIB
                 -125 -> CompressionMethod.EXT_RAW
                 -124 -> CompressionMethod.EXT_LZ4
-                else -> throw IllegalArgumentException("unknown compression: $methodByte")
+                // 未知/损坏的压缩类型：不抛异常（长度字段仍可读，允许原样透传保留），
+                // 仅在解压（allDataUncompressed）时抛错——由调用方决定保留策略。
+                else -> CompressionMethod.UNKNOWN
             }
         var custom: String? = null
         if (method == CompressionMethod.CUSTOM) {
@@ -84,6 +86,12 @@ class McaEntry(
 
     fun serializedBytes(): ByteArray {
         val (len, _, _) = readHeader()
+        // 损坏 chunk 的长度字段可能是垃圾值（如 0x0ac9fbd1 ≈ 180MB）：
+        // 超阈值视为不可信 → 返回空（调用方跳过，避免读大块数据卡死）。
+        // 注意：长度正常但压缩类型非法的 chunk 仍可原样透传（数据字节在原位）。
+        if (len < 0 || len > MAX_VALID_CHUNK_LENGTH) {
+            return ByteArray(0)
+        }
         val total = 4L + len.toLong()
         file.seek(start)
         val out = ByteArray(total.toInt())
@@ -109,6 +117,10 @@ class McaEntry(
         }
         val customLen = if (method == CompressionMethod.CUSTOM) 2 + (custom?.length ?: 0) else 0
         val dataLen = len - 1 - customLen
+        // 荒谬长度（损坏 chunk）：不分配/不读取大块数据（避免卡死/OOM），返回空数据
+        if (len < 0 || dataLen <= 0 || len > MAX_VALID_CHUNK_LENGTH) {
+            return Triple(method, ByteArray(0), custom)
+        }
         file.seek(pos)
         val data = ByteArray(dataLen)
         file.readFully(data)
@@ -122,6 +134,8 @@ class McaEntry(
             CompressionMethod.ZLIB -> InflaterInputStream(data.inputStream()).use { it.readBytes() }
             CompressionMethod.GZIP -> GZIPInputStream(data.inputStream()).use { it.readBytes() }
             CompressionMethod.LZ4 -> decodeLZ4Blocks(data)
+            CompressionMethod.UNKNOWN ->
+                throw IllegalArgumentException("unknown compression: $method")
             else -> ByteArray(0)
         }
     }
@@ -135,6 +149,9 @@ class McaEntry(
     }
 
     companion object {
+        /** 合法 chunk 数据最大长度（压缩后）。MC 单 chunk 压缩后 < 1MB（更大走 .mcc 外部文件），8MB 为安全阈值。 */
+        private const val MAX_VALID_CHUNK_LENGTH = 8 * 1024 * 1024
+
         private val LZ4_MAGIC = "LZ4Block".toByteArray()
         private const val LZ4_HEADER_LEN = 8 + 1 + 4 + 4 + 4
         private const val LZ4_XXHASH_SEED = 0x9747b28c.toInt()
