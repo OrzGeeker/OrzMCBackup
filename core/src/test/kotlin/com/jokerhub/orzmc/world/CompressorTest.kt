@@ -1,15 +1,17 @@
 package com.jokerhub.orzmc.world
 
-import java.nio.file.Files
-import java.util.zip.ZipInputStream
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.zip.ZipInputStream
 
 class CompressorTest {
     @Test
-    fun `zip entries use forward slash separators on any platform`(@TempDir root: Path) {
+    fun `zip entries use forward slash separators on any platform`(
+        @TempDir root: Path,
+    ) {
         // 构造嵌套目录（Windows 下 Path.relativize 会产生反斜杠）
         val dimData = root.resolve("DIM-1").resolve("data")
         Files.createDirectories(dimData)
