@@ -129,8 +129,6 @@ class CorruptedChunkKeepTest {
         assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
         assertTrue(entryLocation(outBytes, 1) != 0, "损坏 chunk 应保留（安全策略）")
     }
-<<<<<<< HEAD
-=======
 
     @Test
     fun `corrupted chunk with absurd length field is skipped without stalling`() {
@@ -181,5 +179,4 @@ class CorruptedChunkKeepTest {
                 .readAllBytes(outFile)
         assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
     }
->>>>>>> 9d51f1c (fix(core): 损坏 chunk 安全保留 + 未知压缩类型透传)
 }
