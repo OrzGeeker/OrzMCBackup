@@ -28,6 +28,12 @@ class McaWriter(
 
     fun writeEntry(entry: McaEntry) {
         val serialized = entry.serializedBytes()
+        if (serialized.isEmpty()) {
+            // 损坏 chunk（长度字段荒谬，数据不可信）：跳过并明确报错，由调用方记录后继续
+            throw IllegalStateException(
+                "Chunk data unreadable (corrupted length field): index ${entry.regionIndex()}",
+            )
+        }
         val start = dataOffset
         file.seek(start)
         file.write(serialized)

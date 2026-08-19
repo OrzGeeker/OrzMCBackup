@@ -129,4 +129,57 @@ class CorruptedChunkKeepTest {
         assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
         assertTrue(entryLocation(outBytes, 1) != 0, "损坏 chunk 应保留（安全策略）")
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    fun `corrupted chunk with absurd length field is skipped without stalling`() {
+        val fs = MemoryFS()
+        val world = Paths.get("/mem/absurd-len-world")
+        fs.createDirectories(world)
+        fs.createDirectories(world.resolve("region"))
+        val mca =
+            McaMemoryBuilder.buildMca(
+                listOf(
+                    McaMemoryBuilder.MemChunk(0, 1000, CompressionKind.RAW),
+                    McaMemoryBuilder.MemChunk(1, 1000, CompressionKind.RAW),
+                ),
+            )
+        // 把 idx1 的长度字段改成荒谬值（≈180MB，真实损坏样本），compression 改非法
+        val data = corruptCompressionByte(mca, 1)
+        val locVal = ByteBuffer.wrap(data, 1 * 4, 4).order(ByteOrder.BIG_ENDIAN).int
+        val off = (locVal ushr 8) * 4096
+        data[off] = 0x0a.toByte()
+        data[off + 1] = 0xc9.toByte()
+        data[off + 2] = 0xfb.toByte()
+        data[off + 3] = 0xd1.toByte()
+        fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
+
+        val out = Paths.get("/mem/absurd-len-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+
+        // 流程快速完成不卡死；正常 chunk 保留；荒谬长度 chunk 被记录并跳过
+        assertEquals(2, report.processedChunks)
+        assertTrue(
+            report.errors.any { it.kind == "Pattern" || it.kind == "Write" },
+            "荒谬长度 chunk 应记录错误，实际: ${report.errors}",
+        )
+        val outFile = fs.toRealPath(out.resolve("region").resolve("r.0.0.mca"))
+        assertTrue(
+            java.nio.file.Files
+                .exists(outFile),
+        )
+        val outBytes =
+            java.nio.file.Files
+                .readAllBytes(outFile)
+        assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
+    }
+>>>>>>> 9d51f1c (fix(core): 损坏 chunk 安全保留 + 未知压缩类型透传)
 }
