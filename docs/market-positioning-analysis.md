@@ -2,7 +2,7 @@
 
 > 分析时间：2026-08-19
 >
-> 分析对象：OrzMCBackup v0.2.1
+> 分析对象：OrzMCBackup v0.2.3
 >
 > 分析方法：代码库与文档梳理（`README` / `FEATURES.md` / `real-world-backup-validation.md` /
 > `papermc-map-backup-recovery-case.md` / `CHANGELOG.md`）+ 竞品公开资料调研。
@@ -107,7 +107,7 @@ MCA Selector、Thanos）不支持该结构。本项目为 26.1+ 做了专项适�
    "自动化/批量"这一侧的市场；
 2. **单一维护者**：bus factor = 1，风险较高；
 3. **文档 / CLI 输出为中文**：对全球市场是天然壁垒（对中国市场反而是优势）；
-4. **项目较年轻**：v0.2.1，社区知名度与教程量几乎为零；
+4. **项目较年轻**：v0.2.3，社区知名度与教程量几乎为零；
 5. **RangePattern（矩形区域保留）未暴露到 CLI**，目前仅库内可用，能力未完全产品化。
 
 ---

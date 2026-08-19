@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.1 (2026-08-20)
+## v0.2.3 (2026-08-20)
 
 ### Fixed
 - **ZIP 打包条目的路径分隔符**：`Compressor.kt` 用系统文件分隔符（Windows 为 `\`）拼条目名，
@@ -10,7 +10,7 @@
   Gradle 内建的占位值 `"unspecified"`（非 null），使 `?: "0.1.0"` 回退逻辑失效。修复：仅接受非空
   且非 `"unspecified"` 的值，否则回退 `0.1.0`（`build.gradle.kts`）。
 - **shadowJar 产物文件名随版本漂移**：`archiveVersion` 默认跟随 `project.version`，产物在
-  `backup-0.2.1.jar` 与 `backup.jar` 之间漂移，脚本引用不稳定。修复：固定为空，产物恒为
+  `backup-0.2.3.jar` 与 `backup.jar` 之间漂移，脚本引用不稳定。修复：固定为空，产物恒为
   `backup.jar`，版本只写入 manifest `Implementation-Version`（`app/build.gradle.kts`）。
 - **经典布局维度杂项数据**：非 26.1+ `dimensions/` 布局（如 `DIM-1/`）下的维度数据
   （`data/chunks.dat`、`Fortress_index.dat`、`world_border.dat` 等）此前可能未被正确复制。

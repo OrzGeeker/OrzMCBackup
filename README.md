@@ -84,7 +84,7 @@ Minecraft 区块一旦生成就不会自动消失。玩家探索、跑图、飞�
 ```
 
 产物：`app/build/libs/backup.jar`（文件名固定；版本号写入 manifest，`--version` 可查）。
-本地默认版本 `0.1.0`；用 `-Pversion=X.Y.Z` 注入（如 `-Pversion=0.2.1`）。
+本地默认版本 `0.1.0`；用 `-Pversion=X.Y.Z` 注入（如 `-Pversion=0.2.3`）。
 
 ### 优化备份
 
@@ -262,7 +262,7 @@ CLI (picocli) → OptimizerRequest → DefaultOptimizer.run()
 
 | 文档 | 内容 |
 |------|------|
-| [`docs/FEATURES.md`](docs/FEATURES.md) | 功能点全量梳理、配置模型、参数速查（v0.2.1） |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | 功能点全量梳理、配置模型、参数速查（v0.2.3） |
 | [`docs/threshold-benchmark-report.md`](docs/threshold-benchmark-report.md) | 真实世界 6 档阈值（0/60/120/180/240/300s）性能与效果对比、逐字节完整性验证 |
 | [`docs/papermc-map-backup-recovery-case.md`](docs/papermc-map-backup-recovery-case.md) | merge 真实案例、算法与三重验收方法 |
 | [`docs/real-world-backup-validation.md`](docs/real-world-backup-validation.md) | 真实世界备份验证、阈值对比、丢失文件分类 |
