@@ -19,7 +19,9 @@ object Compressor {
                 val rel = root.relativize(p)
                 if (rel.toString().isEmpty()) return@forEach
                 if (!Files.isDirectory(p)) {
-                    zos.putNextEntry(ZipEntry(rel.toString()))
+                    // ZIP 规范要求正斜杠作为目录分隔符；Windows 的 Path 用 '\'，
+                    // 直接写入会让 Unix 解压工具把整条路径当作单个文件名。
+                    zos.putNextEntry(ZipEntry(rel.toString().replace('\\', '/')))
                     Files.copy(p, zos)
                     zos.closeEntry()
                 }

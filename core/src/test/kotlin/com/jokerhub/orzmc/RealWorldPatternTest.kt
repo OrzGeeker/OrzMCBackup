@@ -150,6 +150,66 @@ class RealWorldPatternTest {
     }
 
     @Test
+    fun `classic layout nested dimension data files are preserved`() {
+        // Classic pre-26.1 layout: the world root itself is a dimension (has region/)
+        // and nests the nether/end as DIM-1/DIM1, each carrying its own data/ folder.
+        // Regression for BUG: miscRel's exclude check hid a nested dimension's own
+        // data/* files when an ancestor dimension (the root) was in excludePaths.
+        val fs = MemoryFS()
+        val input = Paths.get("/mem/classic-nested-data")
+        fs.mkdirs(input.resolve("region"))
+        fs.write(
+            input.resolve("region").resolve("r.0.0.mca"),
+            McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+        )
+        fs.mkdirs(input.resolve("data"))
+        fs.write(input.resolve("data").resolve("root-data.dat"), "root".toByteArray())
+        val nestedDims =
+            mapOf(
+                "DIM-1" to listOf("fortress_index.dat", "chunks.dat", "world_border.dat"),
+                "DIM1" to listOf("endcity_index.dat", "raids_end.dat"),
+            )
+        for ((dim, dataFiles) in nestedDims) {
+            val d = input.resolve(dim)
+            fs.mkdirs(d.resolve("region"))
+            fs.write(
+                d.resolve("region").resolve("r.0.0.mca"),
+                McaMemoryBuilder.buildSingleEntryMca(0, 1000, CompressionKind.RAW),
+            )
+            fs.mkdirs(d.resolve("data"))
+            dataFiles.forEach { name -> fs.write(d.resolve("data").resolve(name), "x".toByteArray()) }
+        }
+
+        val output = Paths.get("/mem/classic-nested-data-out")
+        val report = Optimizer.run(request(fs, input, output))
+        assertTrue(report.processedChunks > 0, "should process chunks")
+        assertTrue(report.errors.isEmpty(), "no errors expected, got: ${report.errors}")
+
+        // root dimension misc
+        assertTrue(fs.exists(output.resolve("data/root-data.dat")), "root dimension data/ should be preserved")
+        // nested dimension data/ must survive (pre-fix they were silently dropped)
+        assertTrue(
+            fs.exists(output.resolve("DIM-1/data/fortress_index.dat")),
+            "DIM-1/data/fortress_index.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("DIM-1/data/chunks.dat")),
+            "DIM-1/data/chunks.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("DIM1/data/endcity_index.dat")),
+            "DIM1/data/endcity_index.dat should be preserved",
+        )
+        assertTrue(
+            fs.exists(output.resolve("DIM1/data/raids_end.dat")),
+            "DIM1/data/raids_end.dat should be preserved",
+        )
+        // rewritten regions still present
+        assertTrue(fs.exists(output.resolve("DIM-1/region/r.0.0.mca")), "DIM-1 region mca should be in output")
+        assertTrue(fs.exists(output.resolve("DIM1/region/r.0.0.mca")), "DIM1 region mca should be in output")
+    }
+
+    @Test
     fun `region with all chunks removed is not written to output`() {
         val fs = MemoryFS()
         val input = Paths.get("/mem/all-removed-region")

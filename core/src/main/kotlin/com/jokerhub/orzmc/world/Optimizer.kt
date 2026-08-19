@@ -530,7 +530,12 @@ private fun miscRel(
     matchers: List<PathMatcher>,
 ): Path? {
     if (p == dir) return null
-    if (excludePaths.any { it != dir && p.startsWith(it) }) return null
+    // Exclude a path only when it lies inside a dimension subtree that some OTHER
+    // source walk handles. An ancestor of `dir` in excludePaths (e.g. a world root
+    // that is itself a dimension and nests `DIM-1`/`DIM1` below it) must NOT hide
+    // `dir`'s own misc files: `!dir.startsWith(it)` requires `it` to be a proper
+    // descendant-or-sibling subtree, not an ancestor of the current source dir.
+    if (excludePaths.any { !dir.startsWith(it) && p.startsWith(it) }) return null
     val rel = dir.relativize(p)
     if (rel.toString().isEmpty()) return null
     val fileName = rel.nameCount.let { if (it > 0) rel.getName(it - 1).toString() else "" }
