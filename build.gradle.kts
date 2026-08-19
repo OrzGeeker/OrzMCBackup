@@ -15,7 +15,13 @@ if (jvmVersion >= 30) {
     )
 }
 
-val releasedVersion = (findProperty("version") as String?) ?: "0.1.0"
+// Gradle 内置的 project.version 属性默认是 "unspecified"（非 null），
+// 直接 `?: "0.1.0"` 兜底不会生效，导致未传 -Pversion 时版本号变成 "unspecified"。
+// 把 "unspecified" / 空串视为"未设置"，再回落默认版本。
+val releasedVersion =
+    (findProperty("version") as String?)
+        ?.takeIf { it.isNotBlank() && it != "unspecified" }
+        ?: "0.1.0"
 
 allprojects {
     repositories {

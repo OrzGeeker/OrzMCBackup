@@ -47,7 +47,8 @@ jobs:
         run: ./gradlew :app:shadowJar --no-daemon -Pversion=${{ env.VERSION }}
       - name: Generate app checksum
         run: |
-          APP_JAR="app/build/libs/backup-${VERSION}.jar"
+          # 产物文件名固定为 backup.jar（版本写入 manifest），见 app/build.gradle.kts shadowJar
+          APP_JAR="app/build/libs/backup.jar"
           test -s "${APP_JAR}" || { echo "missing app jar: ${APP_JAR}"; exit 1; }
           sha256sum "${APP_JAR}" | awk '{print $1}' > "${APP_JAR}.sha256"
       - name: Upload app artifact
@@ -55,8 +56,8 @@ jobs:
         with:
           name: app-backup-${{ env.VERSION }}
           path: |
-            app/build/libs/backup-${{ env.VERSION }}.jar
-            app/build/libs/backup-${{ env.VERSION }}.jar.sha256
+            app/build/libs/backup.jar
+            app/build/libs/backup.jar.sha256
       - name: Publish GitHub Release (app)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
@@ -64,6 +65,6 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: OrzMCBackup CLI v${{ env.VERSION }}
           files: |
-            app/build/libs/backup-${{ env.VERSION }}.jar
-            app/build/libs/backup-${{ env.VERSION }}.jar.sha256
+            app/build/libs/backup.jar
+            app/build/libs/backup.jar.sha256
       - run: ./gradlew --stop

@@ -68,6 +68,9 @@ kover {
 tasks.withType<Jar>().named("shadowJar") {
     archiveBaseName.set("backup")
     archiveClassifier.set("")
+    // 固定文件名 backup.jar（版本只写入 manifest 的 Implementation-Version），
+    // 避免 Gradle 把 project.version 拼进文件名（未设版本时又省略后缀）导致脚本引用漂移。
+    archiveVersion.set("")
     manifest {
         attributes(
             mapOf(

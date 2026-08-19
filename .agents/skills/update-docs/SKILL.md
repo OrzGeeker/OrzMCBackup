@@ -20,8 +20,8 @@ description: 维护 OrzMCBackup 的文档（README.md / docs/）。修改实现�
      单位是**文件**（backup 是区块）；merge 无 `--progress-interval-ms`
 2. **版本号**：工具链版本（Kotlin/Gradle/ktlint/detekt/Shadow/JUnit 等）只以
    `gradle/libs.versions.toml` 为准；README 中引用的版本号需手工同步
-3. **产物命名**：CLI JAR 恒为 `backup-<version>.jar`（不存在无版本的 `backup.jar`）；本地默认版本 0.1.0，
-   CI 按 tag 注入
+3. **产物命名**：CLI JAR 恒为 `backup.jar`（文件名固定，版本只写入 manifest `Implementation-Version`，
+   用 `--version` 查询）；本地默认版本 0.1.0，CI 按 tag 注入
 4. **JDK 范围**：17-29（构建阻止 30+）；发布工作流用 Temurin 21、lint/coverage 用 JDK 25
 5. **行为声明**：功能声明必须与代码一致。已知易夸大项：`RangePattern`（矩形区域）是**库内类，
    未接入优化器管道与 CLI**，文档不得声称 CLI 支持矩形范围
