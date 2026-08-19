@@ -1,5 +1,6 @@
 package com.jokerhub.orzmc.world
 
+import com.jokerhub.orzmc.mca.McaEntry
 import com.jokerhub.orzmc.patterns.ChunkPattern
 import java.nio.file.Path
 
@@ -167,6 +168,24 @@ internal object DimensionProcessor {
             onError(rf, ERR_MCA, "MCA file is corrupted or incomplete")
             if (!strict) return RegionResult(0, 0)
         }
+
+        // pattern 匹配：任一 pattern 命中即保留；匹配异常（损坏 chunk 无法解析）时
+        // 安全保留原始字节（避免备份丢数据），错误仅记录，不中断流程。
+        fun shouldKeep(
+            entry: McaEntry,
+            patterns: List<ChunkPattern>,
+            error: (Path, String, String) -> Unit,
+        ): Boolean {
+            for (p in patterns) {
+                try {
+                    if (p.matches(entry)) return true
+                } catch (e: Exception) {
+                    error(rf, ERR_PATTERN, "Pattern matching failed: ${e.message}；已保留原始区块")
+                    return true
+                }
+            }
+            return false
+        }
         val name = rf.fileName.toString()
         val efile = entitiesDir.resolve(name)
         val pfile = poiDir.resolve(name)
@@ -213,17 +232,7 @@ internal object DimensionProcessor {
                     emptyList()
                 }
             for (entry in entries) {
-                var keep = false
-                for (p in patterns) {
-                    try {
-                        if (p.matches(entry)) {
-                            keep = true
-                            break
-                        }
-                    } catch (e: Exception) {
-                        onError(rf, ERR_PATTERN, "Pattern matching failed: ${e.message}")
-                    }
-                }
+                val keep = shouldKeep(entry, patterns) { path, kind, msg -> onError(path, kind, msg) }
                 if (keep) {
                     // Lazily create writers only when at least one chunk is kept.
                     if (cw == null && !dryRun) {

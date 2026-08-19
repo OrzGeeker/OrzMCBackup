@@ -26,7 +26,7 @@ class McaEntry(
     private val regionZ: Int,
 ) {
     /** Compression methods used in Minecraft region files. */
-    enum class CompressionMethod { GZIP, ZLIB, RAW, LZ4, CUSTOM, EXT_GZIP, EXT_ZLIB, EXT_RAW, EXT_LZ4 }
+    enum class CompressionMethod { GZIP, ZLIB, RAW, LZ4, CUSTOM, EXT_GZIP, EXT_ZLIB, EXT_RAW, EXT_LZ4, UNKNOWN }
 
     /** Index within the sector table (0-1023). Maps to (x = index % 32, z = index / 32) within the region. */
     fun regionIndex(): Int = index
@@ -63,7 +63,9 @@ class McaEntry(
                 -126 -> CompressionMethod.EXT_ZLIB
                 -125 -> CompressionMethod.EXT_RAW
                 -124 -> CompressionMethod.EXT_LZ4
-                else -> throw IllegalArgumentException("unknown compression: $methodByte")
+                // 未知/损坏的压缩类型：不抛异常（长度字段仍可读，允许原样透传保留），
+                // 仅在解压（allDataUncompressed）时抛错——由调用方决定保留策略。
+                else -> CompressionMethod.UNKNOWN
             }
         var custom: String? = null
         if (method == CompressionMethod.CUSTOM) {
@@ -122,6 +124,8 @@ class McaEntry(
             CompressionMethod.ZLIB -> InflaterInputStream(data.inputStream()).use { it.readBytes() }
             CompressionMethod.GZIP -> GZIPInputStream(data.inputStream()).use { it.readBytes() }
             CompressionMethod.LZ4 -> decodeLZ4Blocks(data)
+            CompressionMethod.UNKNOWN ->
+                throw IllegalArgumentException("unknown compression: $method")
             else -> ByteArray(0)
         }
     }
