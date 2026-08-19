@@ -179,4 +179,53 @@ class CorruptedChunkKeepTest {
                 .readAllBytes(outFile)
         assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
     }
+
+    @Test
+    fun `corrupted chunk with negative length is skipped without stalling`() {
+        // 负数长度（0xFFFFFFFF = -1）：dataBytes/serializedBytes 的 <0 分支
+        val fs = MemoryFS()
+        val world = Paths.get("/mem/neg-len-world")
+        fs.createDirectories(world)
+        fs.createDirectories(world.resolve("region"))
+        val mca =
+            McaMemoryBuilder.buildMca(
+                listOf(
+                    McaMemoryBuilder.MemChunk(0, 1000, CompressionKind.RAW),
+                    McaMemoryBuilder.MemChunk(1, 1000, CompressionKind.RAW),
+                ),
+            )
+        val data = corruptCompressionByte(mca, 1)
+        val locVal = ByteBuffer.wrap(data, 1 * 4, 4).order(ByteOrder.BIG_ENDIAN).int
+        val off = (locVal ushr 8) * 4096
+        data[off] = 0xff.toByte()
+        data[off + 1] = 0xff.toByte()
+        data[off + 2] = 0xff.toByte()
+        data[off + 3] = 0xff.toByte()
+        fs.write(world.resolve("region").resolve("r.0.0.mca"), data)
+
+        val out = Paths.get("/mem/neg-len-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                io = IOOptions(fs = fs, ioFactory = MemoryMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+
+        assertEquals(2, report.processedChunks)
+        assertTrue(
+            report.errors.any { it.kind == "Pattern" || it.kind == "Write" },
+            "负数长度 chunk 应记录错误，实际: ${report.errors}",
+        )
+        val outFile = fs.toRealPath(out.resolve("region").resolve("r.0.0.mca"))
+        assertTrue(
+            java.nio.file.Files
+                .exists(outFile),
+        )
+        val outBytes =
+            java.nio.file.Files
+                .readAllBytes(outFile)
+        assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
+    }
 }
