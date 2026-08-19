@@ -1,6 +1,6 @@
 # OrzMCBackup 功能点梳理
 
-> 基于 v0.2.0 代码库，2026-08 版
+> 基于 v0.2.1 代码库，2026-08 版
 
 ## 一、项目定位
 
@@ -439,6 +439,8 @@ Minecraft Java 版世界优化工具，双用途：
 | `RealMcaMergeTest` | 集成 | 用提交的真实 Anvil 夹具对走生产 `RealFileSystem`+`DefaultMcaIOFactory` 全链路合并 |
 | `MainCliMergeTest` | CLI | merge 子命令 JSON/CSV 报告、进度模式、错误退出码 |
 | `MainDispatchTest` | CLI | `Main.dispatch` 子命令分发（merge/backup/无参）退出码 |
+| `RealWorldPatternTest` | 回归 | region/entities/poi 内非 `.mca` 文件（`.bak`/`.backup`）逐字节保留（miscRel 修复） |
+| `CompressorTest` | 回归 | ZIP 打包条目使用正斜杠分隔符（ZIP 规范），Windows 跨平台可读 |
 
 ### 12.3 辅助工具
 

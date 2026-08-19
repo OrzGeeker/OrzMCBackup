@@ -12,8 +12,8 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 根据 InhabitedTime 阈值、强制加载列表保留区块并重写输出，另提供「优化备份 + 旧全量备份」的**槽位级合并恢复**
 （`merge` 子命令）。双用途：CLI 工具（picocli Shadow JAR）+ 库（Maven Central `io.github.wangzhizhou:backup-core`）。
 
-核心价值：真实 PaperMC 世界（14.3GB / 21,692 个 `.mca`）优化后降至 ~2.1GB（**-85.4%**，剔除 91.4% 区块），
-且零非预期数据丢失。
+核心价值：真实 PaperMC 世界（18.6GB / 21,688 个 `.mca` / 3,162,906 区块）优化后降至 **2.18GB
+（-88.3%**，剔除 92.7% 区块），且零非预期数据丢失（六档阈值逐字节验证）。
 
 ## 技术栈与约束
 
@@ -26,7 +26,7 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 ## 常用命令
 
 ```bash
-# 构建 CLI fat JAR（产物 app/build/libs/backup-<version>.jar；本地默认版本 0.1.0，CI 按 tag 注入）
+# 构建 CLI fat JAR（产物 app/build/libs/backup.jar，文件名固定；版本写 manifest，--version 可查）
 ./gradlew :app:shadowJar --no-daemon
 
 # 运行代码风格和静态分析检查
@@ -108,7 +108,8 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 
 用户文档（中文）：
 - `README.md` — 快速开始、CLI 参考、库用法（**改代码后必须同步**）
-- `docs/FEATURES.md` — 功能点全量梳理（v0.2.0）
+- `docs/FEATURES.md` — 功能点全量梳理（v0.2.1）
+- `docs/threshold-benchmark-report.md` — 六档阈值性能与效果基准、逐字节完整性验证
 - `docs/papermc-map-backup-recovery-case.md` — merge 真实案例与算法
 - `docs/real-world-backup-validation.md` — 真实世界备份验证报告
 - `docs/paper-26.1-world-migration-report.md`、`docs/world-directory-structure-comparison.md` — 格式迁移研究

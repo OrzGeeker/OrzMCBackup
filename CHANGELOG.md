@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.2.1 (2026-08-20)
+
+### Fixed
+- **ZIP 打包条目的路径分隔符**：`Compressor.kt` 用系统文件分隔符（Windows 为 `\`）拼条目名，
+  违反 ZIP 规范（条目必须用 `/`），生成的 zip 在部分工具/系统上无法正确读取。修复：统一转正斜杠。
+  新增 `CompressorTest` 回归测试。
+- **`--version` 输出 "unspecified"**：`findProperty("version")` 在未显式 `-Pversion` 时返回
+  Gradle 内建的占位值 `"unspecified"`（非 null），使 `?: "0.1.0"` 回退逻辑失效。修复：仅接受非空
+  且非 `"unspecified"` 的值，否则回退 `0.1.0`（`build.gradle.kts`）。
+- **shadowJar 产物文件名随版本漂移**：`archiveVersion` 默认跟随 `project.version`，产物在
+  `backup-0.2.1.jar` 与 `backup.jar` 之间漂移，脚本引用不稳定。修复：固定为空，产物恒为
+  `backup.jar`，版本只写入 manifest `Implementation-Version`（`app/build.gradle.kts`）。
+- **经典布局维度杂项数据**：非 26.1+ `dimensions/` 布局（如 `DIM-1/`）下的维度数据
+  （`data/chunks.dat`、`Fortress_index.dat`、`world_border.dat` 等）此前可能未被正确复制。
+  修复 misc 相对路径处理，逐字节保留（`RealWorldPatternTest` 回归实证）。
+
+### Performance
+- **六档 InhabitedTime 阈值真实世界基准**（0/60/120/180/240/300s）：18.6GB / 21,688 `.mca` /
+  3,162,906 区块的 26.2 恢复合并世界，HDD 实测各档 15–27 分钟；`-t 300` 输出 2.18GB（-88.3%），
+  剔除 92.7% 区块，非预期丢失 0。**60 秒为收益拐点**（剔除 91.3%，相当于 t300 的约 98%）；
+  阈值几乎不影响备份耗时，只影响体积。完整数据见 `docs/threshold-benchmark-report.md`。
+
+### Testing
+- 新增 `CompressorTest`（core）：ZIP 条目正斜杠 + 条目完整性回归。
+- 新增 `RealWorldPatternTest`（core）：经典布局 DIM 数据逐字节保留回归。
+- CLI 端到端 9 项测试全部通过（dry-run / zip-output / csv / force 语义 / 缺输出参数 / strict+损坏
+  region / in-place / 经典布局 DIM 数据保留 / `--version`+`--help`），脚本 `cli_tests.ps1`。
+
+### Docs
+- 新增 `docs/threshold-benchmark-report.md`：六档阈值性能与效果基准、逐字节完整性验证
+  （0 新文件 / 0 槽位伪造 / 0 锁步违规 / removedChunks 与槽位差严格吻合）、新旧 jar 输出逐字节一致。
+- `README.md` / `docs/index.html` / `docs/market-positioning-analysis.md` /
+  `docs/real-world-backup-validation.md` 对齐 18.6GB 真实数据（-88.3% / 92.7% / 0 丢失）。
+
 ## v0.2.0 (2026-08-17)
 
 ### Added
