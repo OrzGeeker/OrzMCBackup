@@ -117,6 +117,10 @@ class McaEntry(
         }
         val customLen = if (method == CompressionMethod.CUSTOM) 2 + (custom?.length ?: 0) else 0
         val dataLen = len - 1 - customLen
+        // 荒谬长度（损坏 chunk）：不分配/不读取大块数据（避免卡死/OOM），返回空数据
+        if (len < 0 || dataLen <= 0 || len > MAX_VALID_CHUNK_LENGTH) {
+            return Triple(method, ByteArray(0), custom)
+        }
         file.seek(pos)
         val data = ByteArray(dataLen)
         file.readFully(data)
