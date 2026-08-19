@@ -109,6 +109,11 @@ class BufferedRafAccess(
                 ensure(bufStart)
             }
             val avail = minOf(remaining, bufLen - bufPos)
+            if (avail <= 0) {
+                // 数据块越过了文件末尾（损坏 chunk 的 offset/len 组合非法）：
+                // 抛 EOF 而非死循环（旧实现 remaining 不减 → 无限循环卡死）
+                throw java.io.EOFException("Unexpected end of file at offset $bufStart")
+            }
             System.arraycopy(this.buf, bufPos, dst, dstOff, avail)
             bufPos += avail
             dstOff += avail

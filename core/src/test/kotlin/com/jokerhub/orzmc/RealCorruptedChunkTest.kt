@@ -82,4 +82,47 @@ class RealCorruptedChunkTest {
         val outBytes = Files.readAllBytes(outFile)
         assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
     }
+
+    @Test
+    fun `real io chunk offset beyond file end does not infinite loop`() {
+        // 损坏 chunk 的 offset 越过文件末尾 → BufferedRafAccess 旧实现死循环（EOF 保护回归测试）
+        val fs = RealFileSystem
+        val world = Files.createTempDirectory("real-eof-world")
+        Files.createDirectories(world.resolve("dimensions/minecraft/overworld/region"))
+        val regionDir = world.resolve("dimensions/minecraft/overworld/region")
+        val mca =
+            McaMemoryBuilder.buildMca(
+                listOf(
+                    McaMemoryBuilder.MemChunk(0, 1000, CompressionKind.ZLIB),
+                    McaMemoryBuilder.MemChunk(1, 1000, CompressionKind.ZLIB),
+                ),
+            )
+        // idx1：offset 指向文件末尾之后（sector 0xFFFF00 巨大偏移）
+        val data = mca.copyOf()
+        val v = (0xFFFF00 shl 8) or 1
+        val bb = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(v)
+        System.arraycopy(bb.array(), 0, data, 1 * 4, 4)
+        Files.write(regionDir.resolve("r.0.0.mca"), data)
+
+        val out = Files.createTempDirectory("real-eof-out")
+        val request =
+            OptimizerRequest(
+                input = world,
+                output = out,
+                filter = FilterOptions(inhabitedThresholdSeconds = 0),
+                io = IOOptions(fs = fs, ioFactory = DefaultMcaIOFactory()),
+            )
+        val report = Optimizer.run(request)
+
+        // 流程快速完成（不无限循环）；错误记录；正常 chunk 保留
+        assertEquals(2, report.processedChunks)
+        assertTrue(
+            report.errors.isNotEmpty(),
+            "越界 chunk 应记录错误，实际: ${report.errors}",
+        )
+        val outFile = out.resolve("dimensions/minecraft/overworld/region/r.0.0.mca")
+        assertTrue(Files.exists(outFile))
+        val outBytes = Files.readAllBytes(outFile)
+        assertTrue(entryLocation(outBytes, 0) != 0, "正常 chunk 应保留")
+    }
 }
