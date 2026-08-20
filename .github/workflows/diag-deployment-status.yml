@@ -1,0 +1,35 @@
+name: diag-deployment-status
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: 'Portal deployment id to query'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Query deployment status
+        env:
+          CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
+          CENTRAL_PORTAL_UPLOAD_URL: ${{ secrets.CENTRAL_PORTAL_UPLOAD_URL }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          test -n "${CENTRAL_TOKEN}" || { echo "missing CENTRAL_TOKEN"; exit 1; }
+          PORTAL_BASE="${CENTRAL_PORTAL_UPLOAD_URL%%/api/v1/publisher/upload*}"
+          STATUS_URL="${PORTAL_BASE}/api/v1/publisher/status"
+          echo "querying deployment ${DEPLOYMENT_ID}"
+          resp=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${DEPLOYMENT_ID}" || true)
+          echo "RESPONSE: $resp"
+          state=$(echo "$resp" | sed -n 's/.*"deploymentState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\r')
+          echo "STATE=${state:-<empty>}"
+          # 同时检查 repo1 是否已可见
+          code=$(curl -sS -o /dev/null -w "%{http_code}" "https://repo1.maven.org/maven2/io/github/wangzhizhou/backup-core/0.3.1/backup-core-0.3.1.pom" || true)
+          echo "repo1 0.3.1.pom -> $code"
