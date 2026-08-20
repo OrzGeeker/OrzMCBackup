@@ -1,9 +1,23 @@
 # Changelog
 
-## Unreleased
+## v0.3.1 (2026-08-20)
+
+### Bugfix
+- **符号链接世界备份修复（walk 跟随链接）**：Folia 测试服等 `world → 外部真实目录` 的符号链接
+  布局下，`RealFileSystem.walk` 原不跟随链接 → 链接目标内的 `dimensions/<dim>/region` 全部不可见
+  → 备份 0 chunk 空跑假完成（zip 22 字节，进度 2/2 无任何 chunk）。
+  - `FileSystem.walk` 增加 `followLinks: Boolean = false` 参数；维度发现/计数/复制
+    （`discoverDimensions`/`countMiscFiles`/`copyMiscFiles`）显式传 `true` 进入链接目标。
+  - 删除路径（Optimizer/WorldMerger 的 `resolveOutputDir`）保持默认不跟随，避免 `deleteIfExists`
+    穿链接删掉目标目录内的文件（源世界数据）。
+  - `followLinks=true` 改用 `walkFileTree`：符号链接环（A→B→A）经 `visitFileFailed` 返回
+    `SKIP_SUBTREE` 跳过环路子树，不再抛 `FileSystemLoopException` 导致备份整次崩溃
+    （契合 A6「收集不抛」错误模型）。
+  - 新增 `RealFileSystemSymlinkTest` 4 项（跟随 / 默认不跟随 / 环路跳过 / 普通目录），
+    并修复 Windows 非法路径字符（`minecraft:overworld`）与符号链接创建失败的跳过逻辑。
 
 ### CI
-- **release-lib Portal 兼容修复**（v0.3.0 发布流程暴露，供未来版本发布使用）：
+- **release-lib Portal 兼容修复**（v0.3.0 发布流程暴露）：
   - **deploymentId 解析**：Portal 201 响应体是**裸 UUID**（非 JSON），原 sed 匹配
     `"deploymentId": "..."` 失败 → 误报 `no deploymentId` 并重复上传，产生 3 个 orphan
     deployment（首个发布成功、其余因坐标占用 FAILED——Central 去重保护生效）。改用 UUID
