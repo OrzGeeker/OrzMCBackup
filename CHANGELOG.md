@@ -15,7 +15,11 @@
 - **MemoryFS 路径组件匹配（A18）**：`list`/`walk` 由字符串前缀匹配改为 `Path` 组件级匹配，修复
   Windows `\` 分隔下「/mem/world` 误含 `/mem/world2`」的真实 bug。新增 `MemoryFSTest` 3 项。
 
-### Robustness (A16/A17/A19/A20)
+### Robustness (A6/A16/A17/A19/A20)
+- **错误处理模型统一（A6）**：in-place 替换失败由抛 `InPlaceReplacementException` 冒泡出 `run()`
+  改为记录 InPlace 错误进 `OptimizeReport.errors`，与其余错误路径（resolveOutputDir / copyMiscFiles /
+  handleZipOutput）的「收集不抛」模型一致；`createDirectories` 失败跳过该子树替换，输入世界不受影响；
+  删除 `InPlaceReplacementException` 异常类。`--strict` 下错误升级为退出码 1 的语义不变。
 - **ForceLoad FileSystem 感知（A16）**：`ForceLoad.parse(fs, dim, strict)` 直接经 `FileSystem` 读取
   force-load 文件（`Optimizer` 的 MemoryFS 路径不再落盘）；`NbtForceLoader` 新增 `parse(bytes)` 字节重载。
 - **copy 不跟随符号链接（A17）**：`RealFileSystem.copy` 加 `NOFOLLOW_LINKS`，链接按链接复制而非目标。

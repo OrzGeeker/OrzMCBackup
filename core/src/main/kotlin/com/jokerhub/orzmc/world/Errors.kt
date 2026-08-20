@@ -33,12 +33,6 @@ class CompressionFailedException(
     cause: Throwable? = null,
 ) : OptimizeException(message, cause)
 
-/** Failed during in-place replacement. */
-class InPlaceReplacementException(
-    message: String,
-    cause: Throwable? = null,
-) : OptimizeException(message, cause)
-
 /** The world directory structure is invalid. */
 class InvalidWorldStructureException(
     message: String,
