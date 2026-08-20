@@ -43,7 +43,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v6.2.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run lint gates
         # C11: tag push 不触发 test-matrix，release 自带 ktlint/detekt 门禁
         run: ./gradlew ktlintCheck detekt --no-daemon
