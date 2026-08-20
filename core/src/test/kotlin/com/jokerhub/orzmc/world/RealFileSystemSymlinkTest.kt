@@ -112,6 +112,28 @@ class RealFileSystemSymlinkTest {
     }
 
     @Test
+    fun `walk with followLinks skips symlink loops instead of throwing`() {
+        val root = TestTmp.createTempDirectory("symlink-loop-")
+        try {
+            val container = Files.createDirectories(root.resolve("container"))
+            val a = Files.createDirectories(container.resolve("a"))
+            val b = Files.createDirectories(container.resolve("b"))
+            Files.write(container.resolve("keep.txt"), byteArrayOf(1, 2, 3))
+            // 环路 a/loop-b → b/loop-a → a/...：必须跳过该子树而不抛 FileSystemLoopException
+            if (linkUnsupported(a.resolve("loop-b"), b)) return
+            if (linkUnsupported(b.resolve("loop-a"), a)) return
+
+            val walked = RealFileSystem.walk(container, followLinks = true)
+            assertTrue(
+                walked.any { p -> p.fileName.toString() == "keep.txt" },
+                "有环路时 walk(followLinks=true) 不应中断，其余文件照常列出",
+            )
+        } finally {
+            RealFileSystem.deleteTreeWithRetry(root, 3, 50L)
+        }
+    }
+
+    @Test
     fun `walk includes regular descendants without symlinks`() {
         val root = TestTmp.createTempDirectory("walk-plain-")
         try {

@@ -110,12 +110,47 @@ object RealFileSystem : FileSystem {
         // 如 Folia 测试服 world → 外部真实目录；不跟随时链接目标内的 dimensions/region 不可见，
         // 备份会空跑假完成）。删除路径必须保持默认不跟随，避免 deleteIfExists 穿链接删掉
         // 目标目录内的文件。
-        val s =
-            if (followLinks) {
-                Files.walk(path, java.nio.file.FileVisitOption.FOLLOW_LINKS)
-            } else {
-                Files.walk(path)
-            }
+        if (followLinks) {
+            // 跟随链接必须用 walkFileTree 而非 Files.walk stream：遇到符号链接环（A→B→A）时，
+            // Files.walk + FOLLOW_LINKS 会直接抛 FileSystemLoopException 中止整棵遍历 → 备份崩溃；
+            // walkFileTree 把环路交给 visitFileFailed，返回 SKIP_SUBTREE 只跳过环路子树，其余照常。
+            val result = ArrayList<Path>()
+            Files.walkFileTree(
+                path,
+                setOf(java.nio.file.FileVisitOption.FOLLOW_LINKS),
+                Int.MAX_VALUE,
+                object : java.nio.file.SimpleFileVisitor<Path>() {
+                    override fun preVisitDirectory(
+                        dir: Path,
+                        attrs: java.nio.file.attribute.BasicFileAttributes,
+                    ): java.nio.file.FileVisitResult {
+                        result.add(dir)
+                        return java.nio.file.FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFile(
+                        file: Path,
+                        attrs: java.nio.file.attribute.BasicFileAttributes,
+                    ): java.nio.file.FileVisitResult {
+                        result.add(file)
+                        return java.nio.file.FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFileFailed(
+                        file: Path,
+                        exc: java.io.IOException,
+                    ): java.nio.file.FileVisitResult =
+                        if (exc is java.nio.file.FileSystemLoopException) {
+                            // 符号链接环：跳过该子树继续，不终止整棵遍历
+                            java.nio.file.FileVisitResult.SKIP_SUBTREE
+                        } else {
+                            java.nio.file.FileVisitResult.CONTINUE
+                        }
+                },
+            )
+            return result
+        }
+        val s = Files.walk(path)
         return try {
             s.collect(
                 java.util.stream.Collectors
