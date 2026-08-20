@@ -58,6 +58,11 @@ kover {
     }
 }
 
+// 质量门禁：coverage 阈值不达标时 `./gradlew check` 直接失败（P1 质量门禁）。
+tasks.check {
+    dependsOn("koverVerify")
+}
+
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
@@ -136,9 +141,11 @@ publishing {
 }
 
 signing {
-    val keyId = (findProperty("signing.keyId") as String?)
-    val password = (findProperty("signing.password") as String?)
-    val key = (findProperty("signing.key") as String?)
+    // C10: 兼容点号属性（-Psigning.key=...）与非点号属性（ORG_GRADLE_PROJECT_signingKey 环境变量注入，
+    // 避免 GPG 私钥明文出现在进程命令行）。
+    val keyId = (findProperty("signing.keyId") as String?) ?: (findProperty("signingKeyId") as String?)
+    val password = (findProperty("signing.password") as String?) ?: (findProperty("signingPassword") as String?)
+    val key = (findProperty("signing.key") as String?) ?: (findProperty("signingKey") as String?)
     val normalizedKeyId =
         keyId?.let {
             val s = it.removePrefix("0x")

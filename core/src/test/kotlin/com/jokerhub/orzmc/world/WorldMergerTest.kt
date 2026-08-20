@@ -586,6 +586,89 @@ class WorldMergerTest {
         assertEquals(60, readInhabited(out, "region", "r.1.1.mca", 3))
     }
 
+    private fun writeDimMca(
+        filesystem: FileSystem,
+        world: Path,
+        kind: String,
+        name: String,
+        bytes: ByteArray,
+    ) {
+        // Mirror writeMca: MemoryFS.createDirectories registers only the leaf node, so the
+        // world root and every dimension segment must be created explicitly.
+        filesystem.createDirectories(world)
+        var cur = world
+        for (seg in dim.split("/")) {
+            cur = cur.resolve(seg)
+            filesystem.createDirectories(cur)
+        }
+        val target = cur.resolve(kind).resolve(name)
+        filesystem.createDirectories(target.parent!!)
+        filesystem.write(target, bytes)
+    }
+
+    /** 8 regions with overlapping patch slots, base-only slots, sibling files, and a patch-only region. */
+    private fun buildLargeWorld() {
+        for (r in 0 until 8) {
+            // base keeps slots 0,1,2 (distinct inhabited per region); patch overrides 0 and 2, prunes 1.
+            writeDimMca(fs, base, "region", "r.$r.0.mca", mca(0 to (1000L + r), 1 to 100L, 2 to (500L - r)))
+            writeDimMca(fs, base, "entities", "r.$r.0.mca", mca(0 to 1L, 1 to 2L))
+            writeDimMca(fs, base, "poi", "r.$r.0.mca", mca(0 to 3L))
+            writeDimMca(fs, patch, "region", "r.$r.0.mca", mca(0 to (2000L + r), 2 to (1500L - r)))
+            writeDimMca(fs, patch, "entities", "r.$r.0.mca", mca(0 to 9L))
+            writeDimMca(fs, patch, "poi", "r.$r.0.mca", mca(0 to 11L))
+        }
+        // A patch-only region carrying its full region/entities/poi sibling set.
+        writeDimMca(fs, patch, "region", "r.9.9.mca", mca(0 to 3000L))
+        writeDimMca(fs, patch, "entities", "r.9.9.mca", mca(0 to 5L))
+        writeDimMca(fs, patch, "poi", "r.9.9.mca", mca(0 to 6L))
+    }
+
+    private fun runParallelMergeInto(
+        output: Path,
+        parallelism: Int,
+    ): MergeReport =
+        WorldMerger.run(
+            MergeRequest(
+                base = base,
+                patch = patch,
+                output = output,
+                runtime = RuntimeOptions(parallelism = parallelism),
+                io = IOOptions(fs = fs, ioFactory = io),
+            ),
+        )
+
+    @Test
+    fun `parallel merge is byte-identical across repeated runs and matches sequential`() {
+        buildLargeWorld()
+        val outP1 =
+            java.nio.file.Paths
+                .get("/mem/det-par-1")
+        val outP2 =
+            java.nio.file.Paths
+                .get("/mem/det-par-2")
+        val outSeq =
+            java.nio.file.Paths
+                .get("/mem/det-seq")
+
+        assertEquals(0, runParallelMergeInto(outP1, 4).errors.size)
+        assertEquals(0, runParallelMergeInto(outP2, 4).errors.size)
+        assertEquals(0, runParallelMergeInto(outSeq, 1).errors.size)
+
+        val regionNames = (0 until 8).map { "r.$it.0.mca" } + "r.9.9.mca"
+        for (kind in listOf("region", "entities", "poi")) {
+            for (name in regionNames) {
+                val p1 = outP1.resolve(dim).resolve(kind).resolve(name)
+                val p2 = outP2.resolve(dim).resolve(kind).resolve(name)
+                val seq = outSeq.resolve(dim).resolve(kind).resolve(name)
+                val a = requireNotNull(fs.read(p1)) { "$kind/$name missing in run 1" }
+                val b = requireNotNull(fs.read(p2)) { "$kind/$name missing in run 2" }
+                val s = requireNotNull(fs.read(seq)) { "$kind/$name missing in sequential" }
+                assertArrayEquals(a, b, "parallel run 1 must equal parallel run 2 for $kind/$name")
+                assertArrayEquals(s, a, "parallel must equal sequential for $kind/$name")
+            }
+        }
+    }
+
     private fun readInhabited(
         world: Path,
         kind: String,

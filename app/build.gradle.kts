@@ -65,6 +65,11 @@ kover {
     }
 }
 
+// 质量门禁：coverage 阈值不达标时 `./gradlew check` 直接失败（P1 质量门禁）。
+tasks.check {
+    dependsOn("koverVerify")
+}
+
 tasks.withType<Jar>().named("shadowJar") {
     archiveBaseName.set("backup")
     archiveClassifier.set("")

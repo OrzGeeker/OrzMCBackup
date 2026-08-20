@@ -41,6 +41,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
+      - name: Run lint gates
+        # C11: tag push 不触发 test-matrix，release 自带 ktlint/detekt 门禁
+        run: ./gradlew ktlintCheck detekt --no-daemon
       - name: Run unit tests
         run: ./gradlew :core:test :app:test --no-daemon -Pversion=${{ env.VERSION }}
       - name: Build app shadowJar

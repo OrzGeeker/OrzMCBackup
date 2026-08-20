@@ -336,14 +336,31 @@
 
 ## 五、修复状态
 
-本报告的 P0 条目已在审查当轮实施：
+P0 条目已在审查当轮实施；P1 条目已按路线图顺序实施（并行正确性 → 发布正确性 → CI 成本 → 质量门禁 → 测试补强）：
 
 | 条目 | 状态 | 变更 |
 |---|---|---|
 | A1 Optimizer 重叠守卫 | ✅ 已实施 | `OverlapGuard` 复用 merge 的 toRealPath 语义；`DefaultOptimizer.run` 入口守卫 + 单测 |
 | A2 解压炸弹防护 | ✅ 已实施 | `McaEntry` 解压带上限，超限抛异常走安全保留路径 + 单测 |
+| A3 并行错误收集线程安全 | ✅ 已实施 | `errors` 由 `ArrayList` 改 `CopyOnWriteArrayList`（region 并行 worker 并发 record） |
+| A4 MetricsSink 双重计数 | ✅ 已实施 | 移除按维度 incProcessed/incRemoved，指标只在 `run()` 以最终报告上报一次 |
+| A5 并行度平方 | ✅ 已实施 | 移除维度层并行，并行度只在 region 层生效（热点路径，单盘无增益） |
+| C9 Portal 异步上传验证 | ✅ 已实施 | 解析 `deploymentId` + 轮询 `/api/v1/publisher/status` 至 SUCCESS/FAILED，FAILED 即 exit 1 |
+| C10 GPG 私钥经 env 注入 | ✅ 已实施 | `ORG_GRADLE_PROJECT_signingKey` 环境变量；build.gradle 兼容非点号属性 |
+| C11 release 缺 lint/detekt 门禁 | ✅ 已实施 | release-lib / release-app 测试前加 `ktlintCheck detekt` |
+| C1 macOS × 3 JDK 冗余 | ✅ 已实施 | macOS 裁剪为单 JDK `['17']` |
+| C2 JDK 25 矩阵冗余 | ✅ 已实施 | ubuntu / windows 矩阵降为 `['17','21']` |
+| C3 push+PR 双份矩阵 / 无 concurrency | ✅ 已实施 | push 仅 main；`concurrency` 取消旧 run；`paths-ignore: docs/**、*.md` |
+| C4 coverage 二次运行整套 | ✅ 已实施 | coverage 并入 ubuntu Java 17 job，复用同步已跑测试 |
 | T1 CLI 端到端测试 | ✅ 已实施 | 将 cli_tests.ps1 的 9 个语义改写为 in-JVM `CommandLine.execute()` 测试 |
-| T6 backup CLI 选项补测 | 🔄 随 T1 覆盖 | zip-output / in-place / dry-run / csv report / 非法 format 一并纳入 |
-| T7 merge CLI 错误路径 | 🔄 随 T1 覆盖 | alias 拒绝、损坏 patch 一并纳入 |
+| T2 EXT_* 外部压缩覆盖 | ✅ 已实施 | `ExternalCompressionTest`：removeUnknown 剔除/默认保留 + 标记字节回读存活 |
+| T3 进度模式渲染断言 | ✅ 已实施 | `MainCliProgressModeTest`：Off 零输出 / Global `进度：X%（n/total）` / Region 逐文件 / interval-ms |
+| T4 Compressor 边界 | ✅ 已实施 | `compressToTimestampZip` 单元素相对路径归档自包含修复（`root.toAbsolutePath().parent`） |
+| T5 报告解析回读 | ✅ 已实施 | `JsonTestParser` 最小严格解析器，报告输出证明为合法 JSON（不再仅 contains） |
+| T6 backup CLI 选项补测 | ✅ 已实施 | E2E 追加 remove-unknown / parallelism>1 / zip 语义 |
+| T7 merge CLI 错误路径 | ✅ 已实施 | E2E 追加 alias 拒绝、并行==串行逐字节一致、非法 progress-mode 拒绝 |
+| T8 in-place 失败契约 | ✅ 已实施 | `OptimizerInPlaceFailureTest`：copy / cleanup / createDirectories 失败均抛 `InPlaceReplacementException` |
+| T9 并行确定性 | ✅ 已实施 | `WorldMergerTest` 8 region × parallelism 4 多轮输出逐字节一致且等于串行 |
+| 质量门禁 koverVerify → check | ✅ 已实施 | core/app `tasks.check { dependsOn("koverVerify") }`，阈值不达标即 fail |
 
-P1/P2 条目列入下个版本路线图（并行正确性 A3/A4/A5 → 发布正确性 C9 → CI 成本 C1/C2/C3 → 工程优化 A9/A18/T2/T3）。
+P2 条目列入下个版本路线图（工程优化 A9/A18、权限最小化 C19、版本统一 C20、Dependabot grouping C21 等）。

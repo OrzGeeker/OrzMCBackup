@@ -54,6 +54,40 @@ class MergeReportIOTest {
     }
 
     @Test
+    fun `toJson round-trips through a real JSON parser`() {
+        val r =
+            MergeReport(
+                mergedRegions = 3,
+                copiedFiles = 7,
+                patchSlots = 233021,
+                baseSlots = 463657,
+                linkedEntities = 98384,
+                linkedPoi = 10022,
+                overlayFiles = 7353,
+                errors =
+                    listOf(
+                        OptimizeError("world/region/r.-1.0.mca", "MCA", "boom"),
+                        OptimizeError("a\"b\\c\n", "Kind", "tab\there"),
+                    ),
+            )
+        val parsed = JsonTestParser.parse(MergeReportIO.toJson(r)) as JValue.JObject
+
+        assertEquals("3", (parsed.fields["mergedRegions"] as JValue.JNumber).raw)
+        assertEquals("7", (parsed.fields["copiedFiles"] as JValue.JNumber).raw)
+        assertEquals("233021", (parsed.fields["patchSlots"] as JValue.JNumber).raw)
+        assertEquals("463657", (parsed.fields["baseSlots"] as JValue.JNumber).raw)
+        assertEquals("98384", (parsed.fields["linkedEntities"] as JValue.JNumber).raw)
+        assertEquals("10022", (parsed.fields["linkedPoi"] as JValue.JNumber).raw)
+        assertEquals("7353", (parsed.fields["overlayFiles"] as JValue.JNumber).raw)
+
+        val errors = parsed.fields["errors"] as JValue.JArray
+        assertEquals(2, errors.items.size)
+        val second = errors.items[1] as JValue.JObject
+        assertEquals("a\"b\\c\n", (second.fields["path"] as JValue.JString).value)
+        assertEquals("tab\there", (second.fields["message"] as JValue.JString).value)
+    }
+
+    @Test
     fun `toJson emits real merge counts and escaped errors`() {
         val r =
             MergeReport(

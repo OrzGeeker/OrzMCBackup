@@ -24,10 +24,54 @@
   `--strict` 退出 1 / in-place 保留+剔除 / 经典布局 DIM 数据逐文件保留 / merge `base==output` 别名拒绝
   / 损坏 patch region 回退 base 槽位 / 非法 `--progress-mode` 解析失败。
 
+### Performance (A5)
+- **并行度不再平方**：此前维度层（`processInParallel`）与 region 层并行同时开启时，线程数为
+  `parallelism²`，同一磁盘上无吞吐增益反而可能劣化。修复：维度按序处理，并行度只在 region 层生效
+  （热点路径，每个任务一个 `.mca`），`--parallelism` 并行路径仍完整覆盖。
+
+### Fixed (A3/A4/T4)
+- **并行错误收集线程安全（A3）**：`DefaultOptimizer.run` 的 `errors` 由普通 `ArrayList` 改为
+  `CopyOnWriteArrayList`——`record()` 会从 region 并行 worker 线程并发调用，此前可能丢条目或抛
+  `ConcurrentModificationException`。
+- **MetricsSink 双重计数（A4）**：移除按维度累加的 `incProcessed/incRemoved`，指标只在 `run()`
+  以最终报告总数上报一次；此前多维度并行时聚合统计重复计数。
+- **单元素相对路径的 zip 归档自包含（T4）**：`Compressor.compressToTimestampZip` 的
+  `root.parent ?: root` 在 `root` 为单元素相对路径（parent 为 null）时回退到 root 本身，归档会写入
+  被压缩树内部，`Files.walk` 遂把归档自身纳入。修复：取 `root.toAbsolutePath().parent`，
+  保证归档始终落在被遍历树之外。
+
+### Testing (T2–T9)
+- 新增 `ExternalCompressionTest`（core，T2）：外部压缩 chunk（EXT_GZIP/EXT_ZLIB/EXT_RAW/EXT_LZ4，
+  即 `.mcc` 外存标记字节 -127..-124）的 `isExternal()` 数据安全分支——`--remove-unknown` 剔除 /
+  默认保留，端到端验证标记字节在重写后存活（不会误删外部存储 chunk）。
+- 新增 `MainCliProgressModeTest`（app，T3）：通过注入 `LoggerSink` 断言 Off 零进度输出、Global
+  输出 `进度：X%（n/total）`、Region 逐文件行、`--progress-interval-ms` 时间节流触发。
+- 新增 `OptimizerInPlaceFailureTest`（core，T8）：in-place 替换失败契约——copy 失败、cleanup 失败、
+  region 目录创建失败均抛 `InPlaceReplacementException`，已替换/已删除部分不回滚（不掩盖破坏性结果）。
+- 新增 `JsonTestParser`（core，T5）：无 JSON 依赖下用最小严格解析器把序列化报告解析回值模型，
+  证明输出是**合法 JSON**（此前仅 `string.contains`）。
+- `MainCliE2ETest` 追加（T6/T7）：`--remove-unknown` 外部 chunk 保留/剔除、`--parallelism 4`
+  完整输出、merge 并行与串行逐字节一致、未知进度模式拒绝。
+- `WorldMergerTest` 追加（T9）：8 region × parallelism 4 多轮 merge 输出逐字节一致且等于串行结果。
+
+### Quality Gate
+- **koverVerify 绑定 `check`**：core/app 均加 `tasks.check { dependsOn("koverVerify") }`，
+  coverage 阈值（core 75% / app 50%）不达标时 `./gradlew check` 直接失败，门禁不再可被绕过。
+
+### CI (C1–C4 / C9–C11)
+- **test-matrix**：macOS 裁剪为单 JDK（C1）；JDK 矩阵降为 `['17','21']`（C2）；push 仅触发 main +
+  `concurrency` 取消旧 run + `docs/**`、`*.md` 路径过滤（C3）；coverage 并入 ubuntu Java 17 job
+  复用已跑测试，不再二次运行整套套件（C4）。
+- **release-lib**：Maven Central Portal 上传后解析 `deploymentId` 并轮询 `/api/v1/publisher/status`
+  直到 SUCCESS/FAILED，FAILED 即 exit 1（C9）；GPG 私钥改经 `ORG_GRADLE_PROJECT_signingKey`
+  环境变量注入，不再明文出现在进程命令行（C10）；测试前加 `ktlintCheck detekt` 门禁（C11）。
+- **release-app**：同样加 `ktlintCheck detekt` 门禁（C11）。
+
 ### Docs
 - 新增 `docs/architecture-review.md`：资深架构师 + QA 综合审查报告——优先级路线图（P0–P3）、
   架构审计 A1–A20、测试审计 T1–T13、CI 审计 C1–C23（全部带 file:line 证据），附修复状态跟踪表。
 - 站点落地页新增该报告入口（`doc.html?file=architecture-review.md`）。
+- 修复状态表更新：A3/A4/A5、C1–C4、C9–C11、T2–T9、koverVerify 质量门禁全部标记 ✅。
 
 ## v0.2.3 (2026-08-20)
 

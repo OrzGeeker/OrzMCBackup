@@ -79,7 +79,8 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
    `McaMemoryBuilder`（testFixtures）在内存构建合成 MCA。
 2. **错误容错**：非致命错误收集在 `OptimizeReport.errors`，`strict` 模式升级为退出码 1。
 3. **进度报告**：两种限流——按区块数（`progressInterval`）或按时间（`progressIntervalMs`，优先）。
-4. **可扩展性**：`parallelism` 同时驱动维度级与区域级并行。
+4. **可扩展性**：`parallelism` 驱动 region 层并行（每个任务一个 `.mca`）；维度按序处理，避免并行度平方
+   （A5 后不再有维度级并行）。
 5. **快速 InhabitedTime 检查**：字节级扫描 NBT 标签，不完整反序列化。
 6. **惰性 MCA 写入**：仅当至少保留一个区块才创建输出 writer，避免空 MCA 文件。
 7. **26.1+ 兼容**：ForceLoad 探测 `chunk_tickets.dat` → `chunks.dat`；维度发现递归支持 `dimensions/` 嵌套；
@@ -94,7 +95,7 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 ## 编码规范与质量门槛
 
 - 代码风格：ktlint（含 `--format` 自动修复）+ `.editorconfig` 统一；detekt（根 `detekt.yml`）静态分析
-- 覆盖率门槛：core **≥75%**、app **≥50%**（`koverVerify`，CI 强制）
+- 覆盖率门槛：core **≥75%**、app **≥50%**（`koverVerify` 已绑定 `check`，`./gradlew check` 不达标即失败，CI 强制）
 - CI 矩阵：JDK 17/21/25 × Ubuntu/macOS/Windows（`test-matrix.yml`）；lint/coverage 用 JDK 25；
   发布工作流（`release-lib.yml` / `release-app.yml`）用 **Temurin 21**，产物目标 Java 17
 - 提交前请确保 `./gradlew ktlintCheck detekt --no-daemon` 通过

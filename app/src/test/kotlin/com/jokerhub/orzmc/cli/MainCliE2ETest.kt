@@ -370,4 +370,187 @@ class MainCliE2ETest {
             Cleaner.deleteTreeWithRetry(out, 5, 10)
         }
     }
+
+    @Test
+    fun `backup remove-unknown removes external chunks and keeps them by default`() {
+        val input = Files.createTempDirectory("cli-ext-input-")
+        val outDefault = Files.createTempDirectory("cli-ext-out-default-")
+        val outRemove = Files.createTempDirectory("cli-ext-out-remove-")
+        try {
+            Files.createDirectories(input.resolve("region"))
+            Files.write(
+                input.resolve("region").resolve("r.0.0.mca"),
+                McaMemoryBuilder.buildSingleEntryMca(0, 1_000_000, CompressionKind.EXT_ZLIB),
+            )
+
+            // Without --remove-unknown the external chunk must survive (1 slot).
+            val exitKeep =
+                CommandLine(Main()).execute(
+                    input.toString(),
+                    outDefault.toString(),
+                    "-t",
+                    "0",
+                    "--progress-mode",
+                    "Off",
+                    "--force",
+                )
+            assertEquals(0, exitKeep)
+            assertEquals(
+                1,
+                slotCount(outDefault.resolve("region").resolve("r.0.0.mca")),
+                "external chunk must be kept without --remove-unknown",
+            )
+
+            // With --remove-unknown the external-only region must be dropped entirely.
+            val exitRemove =
+                CommandLine(Main()).execute(
+                    input.toString(),
+                    outRemove.toString(),
+                    "-t",
+                    "0",
+                    "--remove-unknown",
+                    "--progress-mode",
+                    "Off",
+                    "--force",
+                )
+            assertEquals(0, exitRemove)
+            assertFalse(
+                Files.exists(outRemove.resolve("region").resolve("r.0.0.mca")),
+                "external-only region must be dropped under --remove-unknown",
+            )
+        } finally {
+            Cleaner.deleteTreeWithRetry(input, 5, 10)
+            Cleaner.deleteTreeWithRetry(outDefault, 5, 10)
+            Cleaner.deleteTreeWithRetry(outRemove, 5, 10)
+        }
+    }
+
+    @Test
+    fun `backup with parallelism greater than one produces complete output`() {
+        val input = Files.createTempDirectory("cli-par-input-")
+        val out = Files.createTempDirectory("cli-par-out-")
+        try {
+            Files.createDirectories(input.resolve("region"))
+            Files.write(
+                input.resolve("region").resolve("r.0.0.mca"),
+                McaMemoryBuilder.buildMca(
+                    listOf(
+                        McaMemoryBuilder.MemChunk(index = 0, inhabited = 1000, kind = CompressionKind.RAW),
+                        McaMemoryBuilder.MemChunk(index = 1, inhabited = 0, kind = CompressionKind.RAW),
+                    ),
+                ),
+            )
+            Files.write(
+                input.resolve("region").resolve("r.1.0.mca"),
+                McaMemoryBuilder.buildMca(
+                    listOf(
+                        McaMemoryBuilder.MemChunk(index = 0, inhabited = 0, kind = CompressionKind.RAW),
+                        McaMemoryBuilder.MemChunk(index = 1, inhabited = 1000, kind = CompressionKind.RAW),
+                    ),
+                ),
+            )
+
+            val exit =
+                CommandLine(Main()).execute(
+                    input.toString(),
+                    out.toString(),
+                    "-t",
+                    "0",
+                    "--parallelism",
+                    "4",
+                    "--progress-mode",
+                    "Off",
+                    "--force",
+                )
+            assertEquals(0, exit)
+            assertEquals(1, slotCount(out.resolve("region").resolve("r.0.0.mca")), "r.0.0 must keep its one chunk")
+            assertEquals(1, slotCount(out.resolve("region").resolve("r.1.0.mca")), "r.1.0 must keep its one chunk")
+        } finally {
+            Cleaner.deleteTreeWithRetry(input, 5, 10)
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+        }
+    }
+
+    @Test
+    fun `merge with parallelism produces byte-identical output to sequential`() {
+        val base = Files.createTempDirectory("cli-mpar-base-")
+        val patch = Files.createTempDirectory("cli-mpar-patch-")
+        val outSeq = Files.createTempDirectory("cli-mpar-seq-")
+        val outPar = Files.createTempDirectory("cli-mpar-par-")
+        try {
+            fun buildWorld(root: Path) {
+                Files.createDirectories(root.resolve("region"))
+                for (r in 0 until 4) {
+                    Files.write(
+                        root.resolve("region").resolve("r.$r.0.mca"),
+                        McaMemoryBuilder.buildMca(
+                            listOf(
+                                McaMemoryBuilder.MemChunk(index = 0, inhabited = 1000, kind = CompressionKind.RAW),
+                                McaMemoryBuilder.MemChunk(index = 1, inhabited = 100, kind = CompressionKind.ZLIB),
+                            ),
+                        ),
+                    )
+                }
+            }
+            buildWorld(base)
+            buildWorld(patch)
+
+            val exitSeq =
+                CommandLine(MergeCommand()).execute(
+                    base.toString(),
+                    patch.toString(),
+                    outSeq.toString(),
+                    "--force",
+                    "--progress-mode",
+                    "Off",
+                )
+            val exitPar =
+                CommandLine(MergeCommand()).execute(
+                    base.toString(),
+                    patch.toString(),
+                    outPar.toString(),
+                    "--parallelism",
+                    "4",
+                    "--force",
+                    "--progress-mode",
+                    "Off",
+                )
+            assertEquals(0, exitSeq)
+            assertEquals(0, exitPar)
+            for (r in 0 until 4) {
+                val a = Files.readAllBytes(outSeq.resolve("region").resolve("r.$r.0.mca"))
+                val b = Files.readAllBytes(outPar.resolve("region").resolve("r.$r.0.mca"))
+                assertTrue(a.contentEquals(b), "parallel merge must be byte-identical to sequential for r.$r.0.mca")
+            }
+        } finally {
+            Cleaner.deleteTreeWithRetry(base, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(outSeq, 5, 10)
+            Cleaner.deleteTreeWithRetry(outPar, 5, 10)
+        }
+    }
+
+    @Test
+    fun `merge rejects unknown progress mode`() {
+        val base = Files.createTempDirectory("cli-mpm-base-")
+        val patch = Files.createTempDirectory("cli-mpm-patch-")
+        val out = Files.createTempDirectory("cli-mpm-out-")
+        try {
+            buildSingleEntryWorld(base, 1000)
+            buildSingleEntryWorld(patch, 1000)
+            val exit =
+                CommandLine(MergeCommand()).execute(
+                    base.toString(),
+                    patch.toString(),
+                    out.toString(),
+                    "--progress-mode",
+                    "Bogus",
+                )
+            assertNotEquals(0, exit, "an unknown --progress-mode on merge must fail argument parsing")
+        } finally {
+            Cleaner.deleteTreeWithRetry(base, 5, 10)
+            Cleaner.deleteTreeWithRetry(patch, 5, 10)
+            Cleaner.deleteTreeWithRetry(out, 5, 10)
+        }
+    }
 }

@@ -3,8 +3,22 @@ name: test-matrix
 on:
   push:
     branches:
-      - '**'
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+
+# P1-C3: 同一 ref 的旧 run 直接取消，避免 push 刷新时 2× 矩阵叠加跑
+concurrency:
+  group: test-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -27,7 +41,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '17', '21', '25' ]
+        # P1-C2: 产物目标固定 Java 17，JDK 25 工具链兼容已由 lint job 承担
+        java: [ '17', '21' ]
+    env:
+      # Dependabot-triggered runs get "Secret source: Dependabot" and no repo
+      # secrets; an empty token makes codecov-action fail with fail_ci_if_error.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - name: Setup Java ${{ matrix.java }}
@@ -39,6 +58,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on ${{ matrix.java }}
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
+      # P1-C4: coverage 并入矩阵的 Java 17 job，复用同一步已跑的 test 结果，
+      # 不再单开 coverage job 二次运行整套套件。
+      - name: Run coverage (Java 17 only)
+        if: matrix.java == '17'
+        run: bash tools/ci-retry.sh ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
+      - name: Verify coverage threshold (Java 17 only)
+        if: matrix.java == '17'
+        run: bash tools/ci-retry.sh ./gradlew :core:koverVerify :app:koverVerify --no-daemon
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
@@ -47,12 +74,32 @@ jobs:
           path: |
             core/build/reports/tests/
             app/build/reports/tests/
+      - name: Upload coverage report (Java 17 only)
+        if: matrix.java == '17'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            core/build/reports/kover/
+            app/build/reports/kover/
+      - name: Upload to CodeCov (Java 17 only)
+        # Skip on dependabot runs where CODECOV_TOKEN is not available.
+        if: matrix.java == '17' && env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v7
+        with:
+          files: |
+            core/build/reports/kover/report.xml
+            app/build/reports/kover/report.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: OrzMC/OrzMCBackup
+          fail_ci_if_error: true
   windows-tests:
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        java: [ '17', '21', '25' ]
+        # P1-C2: 与 ubuntu 同降为 ['17','21']
+        java: [ '17', '21' ]
     steps:
       - uses: actions/checkout@v7
       - name: Setup Java ${{ matrix.java }}
@@ -78,7 +125,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '17', '21', '25' ]
+        # P1-C1: 全仓仅一个 OS 相关测试（Windows 上 skip），生产 LZ4 为纯 Java 无原生依赖；
+        # macOS 分钟成本是 Linux 10 倍，裁剪为单 JDK。
+        java: [ '17' ]
     steps:
       - uses: actions/checkout@v7
       - name: Setup Java ${{ matrix.java }}
@@ -98,40 +147,3 @@ jobs:
           path: |
             core/build/reports/tests/
             app/build/reports/tests/
-  coverage:
-    runs-on: ubuntu-latest
-    env:
-      # Dependabot-triggered runs get "Secret source: Dependabot" and no repo
-      # secrets; an empty token makes codecov-action fail with fail_ci_if_error.
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Java 25
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 25
-          cache: gradle
-      - uses: gradle/actions/setup-gradle@v6.2.0
-      - name: Run tests with coverage
-        run: bash tools/ci-retry.sh ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
-      - name: Verify coverage threshold
-        run: bash tools/ci-retry.sh ./gradlew :core:koverVerify :app:koverVerify --no-daemon
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: |
-            core/build/reports/kover/
-            app/build/reports/kover/
-      - name: Upload to CodeCov
-        # Skip on dependabot runs where CODECOV_TOKEN is not available.
-        if: env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@v7
-        with:
-          files: |
-            core/build/reports/kover/report.xml
-            app/build/reports/kover/report.xml
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: OrzMC/OrzMCBackup
-          fail_ci_if_error: true

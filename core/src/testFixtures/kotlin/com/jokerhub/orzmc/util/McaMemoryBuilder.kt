@@ -9,7 +9,7 @@ import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 import java.util.zip.GZIPOutputStream
 
-enum class CompressionKind { RAW, ZLIB, GZIP, LZ4 }
+enum class CompressionKind { RAW, ZLIB, GZIP, LZ4, EXT_GZIP, EXT_ZLIB, EXT_RAW, EXT_LZ4 }
 
 object McaMemoryBuilder {
     data class MemChunk(
@@ -35,44 +35,68 @@ object McaMemoryBuilder {
     private fun compress(
         kind: CompressionKind,
         data: ByteArray,
-    ): Pair<Int, ByteArray> =
-        when (kind) {
-            CompressionKind.RAW -> 3 to data
-            CompressionKind.ZLIB -> {
-                val bos = ByteArrayOutputStream()
-                DeflaterOutputStream(bos, Deflater(Deflater.DEFAULT_COMPRESSION, false)).use { it.write(data) }
-                2 to bos.toByteArray()
-            }
+    ): Pair<Int, ByteArray> {
+        // EXT_* methods share the body format of their in-region counterpart but use the
+        // negative header byte (-127..-124) that marks a chunk whose payload lives in an
+        // external `.mcc` file. McaEntry.isExternal() branches on exactly these bytes, so
+        // tests need a way to construct them (T2).
+        val (baseMethod, body) =
+            when (kind) {
+                CompressionKind.RAW,
+                CompressionKind.EXT_RAW,
+                -> 3 to data
 
-            CompressionKind.GZIP -> {
-                val bos = ByteArrayOutputStream()
-                GZIPOutputStream(bos).use { it.write(data) }
-                1 to bos.toByteArray()
-            }
+                CompressionKind.ZLIB,
+                CompressionKind.EXT_ZLIB,
+                -> {
+                    val bos = ByteArrayOutputStream()
+                    DeflaterOutputStream(bos, Deflater(Deflater.DEFAULT_COMPRESSION, false)).use { it.write(data) }
+                    2 to bos.toByteArray()
+                }
 
-            CompressionKind.LZ4 -> {
-                val lz4 = LZ4Factory.safeInstance().fastCompressor()
-                val maxLen = lz4.maxCompressedLength(data.size)
-                val buf = ByteArray(maxLen)
-                val len = lz4.compress(data, 0, data.size, buf, 0)
-                val comp = buf.copyOf(len)
-                val token = 0x20
-                val bb = ByteBuffer.allocate(8 + 1 + 4 + 4 + 4).order(ByteOrder.LITTLE_ENDIAN)
-                bb.put("LZ4Block".toByteArray())
-                bb.put(token.toByte())
-                bb.putInt(comp.size)
-                bb.putInt(data.size)
-                val factory = XXHashFactory.fastestInstance()
-                val hasher = factory.hash32()
-                val bbData = ByteBuffer.wrap(data)
-                val checksum = hasher.hash(bbData, 0, data.size, 0x9747b28c.toInt()) and 0x0FFFFFFF
-                bb.putInt(checksum)
-                val out = ByteArrayOutputStream()
-                out.write(bb.array())
-                out.write(comp)
-                4 to out.toByteArray()
+                CompressionKind.GZIP,
+                CompressionKind.EXT_GZIP,
+                -> {
+                    val bos = ByteArrayOutputStream()
+                    GZIPOutputStream(bos).use { it.write(data) }
+                    1 to bos.toByteArray()
+                }
+
+                CompressionKind.LZ4,
+                CompressionKind.EXT_LZ4,
+                -> {
+                    val lz4 = LZ4Factory.safeInstance().fastCompressor()
+                    val maxLen = lz4.maxCompressedLength(data.size)
+                    val buf = ByteArray(maxLen)
+                    val len = lz4.compress(data, 0, data.size, buf, 0)
+                    val comp = buf.copyOf(len)
+                    val token = 0x20
+                    val bb = ByteBuffer.allocate(8 + 1 + 4 + 4 + 4).order(ByteOrder.LITTLE_ENDIAN)
+                    bb.put("LZ4Block".toByteArray())
+                    bb.put(token.toByte())
+                    bb.putInt(comp.size)
+                    bb.putInt(data.size)
+                    val factory = XXHashFactory.fastestInstance()
+                    val hasher = factory.hash32()
+                    val bbData = ByteBuffer.wrap(data)
+                    val checksum = hasher.hash(bbData, 0, data.size, 0x9747b28c.toInt()) and 0x0FFFFFFF
+                    bb.putInt(checksum)
+                    val out = ByteArrayOutputStream()
+                    out.write(bb.array())
+                    out.write(comp)
+                    4 to out.toByteArray()
+                }
             }
-        }
+        val method =
+            when (kind) {
+                CompressionKind.EXT_GZIP -> -127
+                CompressionKind.EXT_ZLIB -> -126
+                CompressionKind.EXT_RAW -> -125
+                CompressionKind.EXT_LZ4 -> -124
+                else -> baseMethod
+            }
+        return method to body
+    }
 
     fun buildSingleEntryMca(
         index: Int,

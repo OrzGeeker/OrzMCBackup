@@ -22,7 +22,6 @@ internal data class DimensionContext(
     val processedChunksAtomic: java.util.concurrent.atomic.AtomicLong,
     val record: (Path, String, String) -> Unit,
     val emit: (ProgressStage, Long?, Long?, Path?, String?) -> Unit,
-    val metricsSink: MetricsSink,
     val removeUnknown: Boolean,
     val strict: Boolean,
     val progressInterval: Long,
@@ -117,7 +116,10 @@ object DefaultOptimizer : OptimizerEngine {
     override fun run(request: OptimizerRequest): OptimizeReport {
         val input = request.input
         val fs = request.io.fs
-        val errors = mutableListOf<OptimizeError>()
+        // Thread-safe: record() is invoked from parallel region worker threads inside
+        // DimensionProcessor (A3). A plain ArrayList would lose entries or throw
+        // ConcurrentModificationException under concurrent adds.
+        val errors = java.util.concurrent.CopyOnWriteArrayList<OptimizeError>()
         val metrics = request.hooks.metricsSink ?: NoopMetricsSink()
         val progressSink = request.progress.sink
 
@@ -190,7 +192,6 @@ object DefaultOptimizer : OptimizerEngine {
                 processedChunksAtomic = processedChunksAtomic,
                 record = { p, k, m -> record(p, k, m) },
                 emit = { s, c, t, p, m -> emit(s, c, t, p, m) },
-                metricsSink = metrics,
                 removeUnknown = request.filter.removeUnknown,
                 strict = request.filter.strict,
                 progressInterval = request.progress.interval,
@@ -292,11 +293,12 @@ object DefaultOptimizer : OptimizerEngine {
         ctx: DimensionContext,
         tasks: List<Path>,
     ): Long {
-        if (ctx.parallelism <= 1) {
-            return processSerially(ctx, tasks)
-        } else {
-            return processInParallel(ctx, tasks)
-        }
+        // Single-level parallelism (A5): dimensions are processed serially; the region
+        // parallelism (ctx.parallelism) is applied inside DimensionProcessor.process.
+        // Parallelizing both levels would square the thread count (parallelism² threads)
+        // for no throughput gain on the same disk. Region-level parallel is the hot path
+        // (one .mca per task) and remains fully exercised via ctx.parallelism.
+        return processSerially(ctx, tasks)
     }
 
     private fun processSerially(
@@ -307,40 +309,9 @@ object DefaultOptimizer : OptimizerEngine {
         tasks.forEach { dim ->
             val result = processSingleDimension(ctx, dim)
             removedTotal += result.removed
-            ctx.metricsSink.incProcessed(result.processed)
-            ctx.metricsSink.incRemoved(result.removed)
+            // Metrics are reported exactly once, from the final report totals in run()
+            // (A4). Per-dimension incProcessed/incRemoved here would double-count.
         }
-        return removedTotal
-    }
-
-    private fun processInParallel(
-        ctx: DimensionContext,
-        tasks: List<Path>,
-    ): Long {
-        var removedTotal = 0L
-        val executor =
-            java.util.concurrent.Executors
-                .newFixedThreadPool(ctx.parallelism)
-        val futures = mutableListOf<java.util.concurrent.Future<DimensionResult>>()
-        tasks.forEach { dim ->
-            val task = java.util.concurrent.Callable { processSingleDimension(ctx, dim) }
-            futures.add(executor.submit(task))
-        }
-        futures.forEach { f ->
-            try {
-                val r = f.get()
-                removedTotal += r.removed
-                ctx.metricsSink.incProcessed(r.processed)
-                ctx.metricsSink.incRemoved(r.removed)
-            } catch (e: Exception) {
-                ctx.record(
-                    ctx.input,
-                    "Parallel",
-                    "Dimension parallel processing failed: ${e.message ?: "unknown error"}",
-                )
-            }
-        }
-        executor.shutdown()
         return removedTotal
     }
 
@@ -362,22 +333,28 @@ object DefaultOptimizer : OptimizerEngine {
                 ListPattern(forced),
                 InhabitedTimePattern(ctx.ticks, ctx.removeUnknown),
             )
-        return DimensionProcessor.process(
-            ctx.fs,
-            ctx.ioFactory,
-            dim,
-            targetDim,
-            patterns,
-            ctx.record,
-            ctx.progressSink,
-            ctx.progressTotal,
-            ctx.progressInterval,
-            ctx.progressIntervalMs,
-            ctx.processedChunksAtomic,
-            ctx.strict,
-            ctx.parallelism,
-            dryRun = ctx.dryRun,
-        )
+        val startProcessed = ctx.processedChunksAtomic.get()
+        val result =
+            DimensionProcessor.process(
+                ctx.fs,
+                ctx.ioFactory,
+                dim,
+                targetDim,
+                patterns,
+                ctx.record,
+                ctx.progressSink,
+                ctx.progressTotal,
+                ctx.progressInterval,
+                ctx.progressIntervalMs,
+                ctx.processedChunksAtomic,
+                ctx.strict,
+                ctx.parallelism,
+                dryRun = ctx.dryRun,
+            )
+        // DimensionProcessor returns the global cumulative counter snapshot; convert to
+        // this dimension's own delta so DimensionResult.processed stays per-dimension
+        // (A4) — a cumulative value here is what misled callers into double-counting.
+        return result.copy(processed = result.processed - startProcessed)
     }
 
     @Suppress("ThrowsCount")
@@ -493,22 +470,29 @@ object DefaultOptimizer : OptimizerEngine {
     ) {
         val base = ctx.processedChunksAtomic.get()
         val afterMisc = base + miscTotal
+        var compressed = false
         try {
             ctx.emit(ProgressStage.Compress, afterMisc, ctx.progressTotal, ctx.out, null)
             Compressor.compressToTimestampZip(ctx.out)
+            compressed = true
             ctx.emit(ProgressStage.Compress, afterMisc + 1, ctx.progressTotal, ctx.out, null)
         } catch (e: IOException) {
             val msg = "Failed to compress output directory: ${ctx.out}"
             ctx.record(ctx.out, "Compress", msg)
         }
-        try {
-            ctx.emit(ProgressStage.Cleanup, afterMisc + 1, ctx.progressTotal, ctx.out, null)
-            val ok = ctx.fs.deleteTreeWithRetry(ctx.out, 5, 500)
-            if (!ok) throw IOException("cleanup failed")
-            ctx.emit(ProgressStage.Cleanup, afterMisc + 2, ctx.progressTotal, ctx.out, null)
-        } catch (e: IOException) {
-            val msg = "Failed to delete output directory: ${ctx.out}"
-            ctx.record(ctx.out, "Cleanup", msg)
+        // Data-safety (T4): only remove the freshly built output directory when the
+        // archive was actually written. Deleting it after a failed compress would
+        // destroy the only copy of the optimized world — there is no zip to fall back on.
+        if (compressed) {
+            try {
+                ctx.emit(ProgressStage.Cleanup, afterMisc + 1, ctx.progressTotal, ctx.out, null)
+                val ok = ctx.fs.deleteTreeWithRetry(ctx.out, 5, 500)
+                if (!ok) throw IOException("cleanup failed")
+                ctx.emit(ProgressStage.Cleanup, afterMisc + 2, ctx.progressTotal, ctx.out, null)
+            } catch (e: IOException) {
+                val msg = "Failed to delete output directory: ${ctx.out}"
+                ctx.record(ctx.out, "Cleanup", msg)
+            }
         }
     }
 

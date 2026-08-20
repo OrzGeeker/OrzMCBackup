@@ -38,7 +38,7 @@ Minecraft Java 版世界优化工具，双用途：
 | | `dryRun=false` | 预览模式（只统计不写入） |
 | `ProgressOptions` | `interval=1000` | 按区块数的进度回调间隔 |
 | | `intervalMs=0` | 按毫秒的进度回调间隔（>0 时优先） |
-| `RuntimeOptions` | `parallelism=1` | 维度级并行线程数 |
+| `RuntimeOptions` | `parallelism=1` | region 级并行线程数（维度按序处理，A5） |
 | `Hooks` | `onError` | 错误回调 lambda |
 | | `reportSink` | 报告输出接收器 |
 | | `metricsSink` | 指标收集接收器 |
@@ -394,7 +394,7 @@ Minecraft Java 版世界优化工具，双用途：
 | `--report-format` | 枚举 | json | json/csv |
 | `--progress-interval` | 整数 | 1000 | 进度回调间隔（区块数） |
 | `--progress-interval-ms` | 整数 | 0 | 进度回调间隔（毫秒） |
-| `--parallelism` | 整数 | 1 | 维度并行数 |
+| `--parallelism` | 整数 | 1 | region 并行线程数（维度按序处理） |
 | `--copy-misc` | 布尔 | true | 复制杂项文件 |
 | `--dry-run` | 开关 | false | 预览模式 |
 
@@ -473,7 +473,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 | 工作流 | 触发条件 | 内容 |
 |--------|----------|------|
-| `test-matrix.yml` | push / PR | 3 JDK × 3 OS 矩阵测试 + Kover 覆盖率门槛（`:core:koverVerify :app:koverVerify`，lint/coverage 使用 JDK 25） |
+| `test-matrix.yml` | push→main / PR | JDK `['17','21']` × ubuntu/windows + macOS 单 JDK 测试；concurrency 取消旧 run；`docs/**`、`*.md` 路径过滤；coverage 并入 ubuntu Java 17 job（复用已跑测试，`:core:koverVerify :app:koverVerify`，lint 使用 JDK 25） |
 | `release-lib.yml` | tag `v*` / manual | 签名并发布库到 Maven Central Portal |
 | `release-app.yml` | tag / manual | 构建 Shadow JAR + GitHub Release |
 | `dependabot.yml` | 每日 | 自动检查依赖更新 |

@@ -12,7 +12,11 @@ object Compressor {
     /** Compress [root] into a sibling ZIP file named `yyyyMMddHHmmss.zip`, then return its path. */
     fun compressToTimestampZip(root: Path): Path {
         val ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-        val parent = root.parent ?: root
+        // "Next to the root" must be a location outside the tree being compressed:
+        // writing the archive inside [root] (root.parent == null, e.g. a single-element
+        // relative path) would make the walk include the archive itself. Resolve the
+        // absolute parent so the fallback is still outside the walked tree (T4).
+        val parent = root.toAbsolutePath().parent ?: root
         val zipPath = parent.resolve("$ts.zip")
         ZipOutputStream(Files.newOutputStream(zipPath)).use { zos ->
             Files.walk(root).forEach { p ->

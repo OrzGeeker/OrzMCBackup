@@ -139,4 +139,51 @@ class ReportIOTest {
             )
         assertTrue(content.contains("5,2,0"))
     }
+
+    @Test
+    fun `toJson round-trips through a real JSON parser`() {
+        val report =
+            OptimizeReport(
+                processedChunks = 42,
+                removedChunks = 7,
+                errors =
+                    listOf(
+                        OptimizeError("/world/region/r.0.0.mca", "MCA", "corrupted"),
+                        OptimizeError("/world/region/r.1.0.mca", "Write", "write failed"),
+                    ),
+            )
+        val parsed = JsonTestParser.parse(ReportIO.toJson(report)) as JValue.JObject
+
+        assertEquals("42", (parsed.fields["processedChunks"] as JValue.JNumber).raw)
+        assertEquals("7", (parsed.fields["removedChunks"] as JValue.JNumber).raw)
+        val errors = parsed.fields["errors"] as JValue.JArray
+        assertEquals(2, errors.items.size)
+        val first = errors.items[0] as JValue.JObject
+        assertEquals("/world/region/r.0.0.mca", (first.fields["path"] as JValue.JString).value)
+        assertEquals("MCA", (first.fields["kind"] as JValue.JString).value)
+        assertEquals("corrupted", (first.fields["message"] as JValue.JString).value)
+    }
+
+    @Test
+    fun `toJson escapes every special character and round-trips byte-identical`() {
+        // Every escape the serializer emits must survive a parse round-trip losslessly.
+        // U+0001 is appended from a computed char so the source never needs the \uXXXX
+        // escape (which tooling may pre-decode).
+        // \f (form feed) is not a Kotlin escape sequence, so it is appended as a computed
+        // char together with the U+0001 control char.
+        val message = "line1\nline2\t\"quoted\"\\back\\slash\b\r" + 12.toChar() + 1.toChar() + "end"
+        val report =
+            OptimizeReport(
+                processedChunks = 1,
+                removedChunks = 0,
+                errors = listOf(OptimizeError("path\"with\\chars\n", "kind", message)),
+            )
+        val parsed = JsonTestParser.parse(ReportIO.toJson(report)) as JValue.JObject
+        val errors = parsed.fields["errors"] as JValue.JArray
+        val err = errors.items[0] as JValue.JObject
+
+        assertEquals(message, (err.fields["message"] as JValue.JString).value)
+        assertEquals("path\"with\\chars\n", (err.fields["path"] as JValue.JString).value)
+        assertEquals(1, errors.items.size)
+    }
 }
