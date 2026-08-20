@@ -21,7 +21,7 @@ description: 构建 OrzMCBackup 的 CLI fat JAR（shadowJar）。产物位于 ap
 - 需要指定版本时：
 
 ```bash
-./gradlew :app:shadowJar -Pversion=0.2.3 --no-daemon
+./gradlew :app:shadowJar -Pversion=0.3.0 --no-daemon
 ```
 
 ## 运行验证

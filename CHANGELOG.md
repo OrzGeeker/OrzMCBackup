@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.3.0 (2026-08-20)
+
 ### Performance (A9/A11/A12/A13/A15)
 - **BufferedRafAccess 绝对位置（A9）**：`pos` 改为绝对文件位置，大块读直接旁路缓冲区
   （`delegate.seek+readFully`），消除「整块读 + 尾部再读」的双次 seek 模式。新增 `RandomAccessTest`

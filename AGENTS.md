@@ -115,7 +115,7 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 
 用户文档（中文）：
 - `README.md` — 快速开始、CLI 参考、库用法（**改代码后必须同步**）
-- `docs/FEATURES.md` — 功能点全量梳理（v0.2.3）
+- `docs/FEATURES.md` — 功能点全量梳理（v0.3.0）
 - `docs/threshold-benchmark-report.md` — 六档阈值性能与效果基准、逐字节完整性验证
 - `docs/papermc-map-backup-recovery-case.md` — merge 真实案例与算法
 - `docs/real-world-backup-validation.md` — 真实世界备份验证报告
