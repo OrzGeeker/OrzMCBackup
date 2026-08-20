@@ -118,7 +118,7 @@ jobs:
           while [ $attempts -lt 60 ]; do
             status_resp=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${DEPLOYMENT_ID}" || true)
             state=$(echo "$status_resp" | sed -n 's/.*"deploymentState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\r')
-            echo "Portal state: ${state:-<empty>} (attempt $((attempts+1))/30)"
+            echo "Portal state: ${state:-<empty>} (attempt $((attempts+1))/60)"
             case "$state" in
               PUBLISHED)
                 published=1
@@ -135,11 +135,11 @@ jobs:
                   publish_sent=1
                 fi
                 attempts=$((attempts+1))
-                sleep 15
+                sleep 20
                 ;;
               *)
                 attempts=$((attempts+1))
-                sleep 15
+                sleep 20
                 ;;
             esac
           done
