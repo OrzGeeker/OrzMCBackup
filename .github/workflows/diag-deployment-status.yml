@@ -15,6 +15,7 @@ jobs:
           STATUS_URL="${PORTAL_BASE}/api/v1/publisher/status"
           for ID in b3a2b4b0-e42e-4f3d-88f9-cdf8b43c4c20 dd6821d9-f72a-4b0e-ad9c-d63800e803fa 335efedf-98f2-4477-a023-a7b1cbe7008e; do
             echo "=== $ID ==="
-            curl -sS -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${ID}"
+            # status 端点是 POST（文档），query 参数 id=<deploymentId>
+            curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${ID}"
             echo
           done
