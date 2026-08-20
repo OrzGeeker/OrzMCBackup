@@ -1,6 +1,6 @@
 # OrzMCBackup 功能点梳理
 
-> 基于 v0.2.3 代码库，2026-08 版
+> 基于 v0.2.3 代码库 + Unreleased（A1/A2/T1 增强），2026-08 版
 
 ## 一、项目定位
 
@@ -46,6 +46,15 @@ Minecraft Java 版世界优化工具，双用途：
 | | `ioFactory=DefaultMcaIOFactory` | MCA 读写器工厂 |
 
 **Builder 模式**：`OptimizerRequestBuilder` 提供流畅 API，支持分组配置（`filter { }`、`output { }` 等）。
+
+### 2.3 输入/输出目录重叠守卫（`OverlapGuard`，数据安全）
+
+- 抽取自 `WorldMerger.overlaps` 的共享守卫（单一事实源），`Optimizer.run` 与 `WorldMerger.run` 复用。
+- `Optimizer.run` 在**任何写入之前**校验 input 与 output 相同 / 嵌套 / 祖先 / 符号链接别名，`--force`
+  覆盖前即拒绝（`input == output` 且带 `--force` 时会先清空输入，不可逆）。
+- 路径解析：`RealFileSystem` 走 `toRealPath`（解析符号链接/junction 别名）；`MemoryFS` 走词法
+  normalize（`toRealPath` 会把内存数据物化到临时目录，产生假别名）。
+- in-place 与 dry-run 使用全新临时目录，天然不重叠，不触发守卫。
 
 ---
 
@@ -220,7 +229,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ### 7.4 安全性
 
-- base/patch/output 三目录**互不重叠**校验（任一重叠即拒绝）。
+- base/patch/output 三目录**互不重叠**校验（任一重叠即拒绝，复用 `OverlapGuard`，见 2.3）。
 - 输入非目录、输出不可写、非空输出未加 `--force` 均记录错误并返回非 0 退出码。
 - 逐 region 独立写文件，并行（`--parallelism > 1`）不改变输出字节。
 
@@ -268,6 +277,12 @@ Minecraft Java 版世界优化工具，双用途：
 - `dataBytes()` → 解析为 `(CompressionMethod, ByteArray, customName?)`
 - `allDataUncompressed()` → 完整解压为原始字节
 - `isExternal()` → 检查是否为外部压缩格式
+
+**解压炸弹防护**（`MAX_UNCOMPRESSED_CHUNK_LENGTH` = 64MB）：
+- 压缩长度上限 8MB 只约束压缩态；极小高压缩比 payload（如全零）可膨胀到数 GB 导致 OOM。
+- ZLIB/GZIP 走 `readBounded`（解压总量超限即抛错）；LZ4 在分配目标缓冲区**之前**校验声明长度，
+  并对累计解压量累加校验（防损坏表头 OOM）。
+- 超限 chunk 走安全保留路径：原字节透传 + Pattern 错误上报，**绝不丢弃**。
 
 **LZ4 解码**：
 - 读取 LZ4Block 格式：魔数 `LZ4Block` + 1 byte token + 压缩/解压长度 + xxhash32
@@ -418,7 +433,7 @@ Minecraft Java 版世界优化工具，双用途：
 | `Lz4InvalidTest` | 单元 | 损坏 LZ4 数据的容错 |
 | `OptimizerApiTest` | 单元 | API 入口组合 |
 | `OptimizerConfigParamTest` | 参数化 | 所有配置组合 |
-| `OptimizerInputValidationTest` | 单元 | 无效输入的错误处理 |
+| `OptimizerInputValidationTest` | 单元 | 无效输入的错误处理 + input/output 重叠守卫（相等/嵌套/祖先拒绝，独立目录带 force 正常） |
 | `OptimizerOutputModeTest` | 单元 | 4 种输出模式 |
 | `ForceLoadedListTest` | 功能 | 强制加载保留 |
 | `ForceLoadedOverrideThresholdTest` | 功能 | 强制加载覆盖阈值 |
@@ -441,6 +456,8 @@ Minecraft Java 版世界优化工具，双用途：
 | `MainDispatchTest` | CLI | `Main.dispatch` 子命令分发（merge/backup/无参）退出码 |
 | `RealWorldPatternTest` | 回归 | region/entities/poi 内非 `.mca` 文件（`.bak`/`.backup`）逐字节保留（miscRel 修复） |
 | `CompressorTest` | 回归 | ZIP 打包条目使用正斜杠分隔符（ZIP 规范），Windows 跨平台可读 |
+| `DecompressionBombTest` | 安全 | 解压炸弹防护：ZLIB 高压缩比 payload 超限抛错、LZ4 声明超限先于分配抛错、炸弹 chunk 端到端安全保留 |
+| `MainCliE2ETest` | CLI | in-JVM 端到端：dry-run / zip-output / CSV 报告 / 未知格式回退 JSON / force 语义 / 缺输出参数 / in-place / 经典布局 DIM 数据 / merge 别名拒绝与损坏 patch 回退 / 非法 progress-mode |
 
 ### 12.3 辅助工具
 

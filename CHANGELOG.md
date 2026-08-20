@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Security (A2)
+- **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压后数据总量设硬上限
+  `MAX_UNCOMPRESSED_CHUNK_LENGTH`（64MB，远高于任何合法 chunk payload < 1MB）。此前压缩长度上限
+  8MB 只约束压缩态，一个极小的高压缩比 payload（如全零）可膨胀到数 GB 直接 OOM。修复：ZLIB/GZIP
+  走有界读取（`readBounded`），LZ4 在分配目标缓冲区**之前**校验声明长度（防损坏表头 OOM），并对累计
+  解压量累加校验。超限 chunk 走既有安全保留路径（原字节透传 + Pattern 错误上报），绝不丢弃。
+  新增 `DecompressionBombTest`（core，3 项：ZIP 炸弹抛错 / LZ4 声明超限先于分配抛错 / 炸弹端到端安全保留）。
+
+### Fixed (A1)
+- **输入/输出目录重叠守卫**：抽取 `OverlapGuard`（统一复用 `WorldMerger.overlaps` 逻辑，单一事实源），
+  `Optimizer.run` 在任何写入前校验 input 与 output 相同 / 嵌套 / 祖先 / 符号链接别名，
+  `--force` 覆盖前即拒绝（此前 `input == output` 且带 `--force` 会先清空输入再处理，风险不可逆）。
+  in-place 与 dry-run 使用全新临时目录，天然不重叠。新增 `OptimizerInputValidationTest` 4 项
+  （相等 / 嵌套 / 祖先拒绝 + 独立目录带 force 正常）。
+
+### Testing (T1)
+- 新增 `MainCliE2ETest`（app，in-JVM 端到端）：把此前仅有未提交 `cli_tests.ps1` 脚本守护的 CLI 语义
+  固化为 12 项 JUnit 测试——dry-run 不写输出 / zip-output 产出时间戳 zip 并删除输出目录 / CSV 报告头
+  / 未知报告格式静默回退 JSON / 非空输出无 `--force` 拒绝（`--strict` 退出 1、输出原样）/ 缺输出参数
+  `--strict` 退出 1 / in-place 保留+剔除 / 经典布局 DIM 数据逐文件保留 / merge `base==output` 别名拒绝
+  / 损坏 patch region 回退 base 槽位 / 非法 `--progress-mode` 解析失败。
+
+### Docs
+- 新增 `docs/architecture-review.md`：资深架构师 + QA 综合审查报告——优先级路线图（P0–P3）、
+  架构审计 A1–A20、测试审计 T1–T13、CI 审计 C1–C23（全部带 file:line 证据），附修复状态跟踪表。
+- 站点落地页新增该报告入口（`doc.html?file=architecture-review.md`）。
+
 ## v0.2.3 (2026-08-20)
 
 ### Fixed

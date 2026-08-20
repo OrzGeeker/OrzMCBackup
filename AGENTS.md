@@ -84,7 +84,12 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 6. **惰性 MCA 写入**：仅当至少保留一个区块才创建输出 writer，避免空 MCA 文件。
 7. **26.1+ 兼容**：ForceLoad 探测 `chunk_tickets.dat` → `chunks.dat`；维度发现递归支持 `dimensions/` 嵌套；
    `discoverMiscParents` 自动发现 world 级杂项源，确保 `level.dat`/`players/`/`data/` 等在直接传入世界目录时也正确复制。
-8. **merge 数据安全**：patch 优先、base 填空、entities/poi 锁步；三目录互斥校验（alias guard）；损坏 patch 回退 base。
+8. **merge 数据安全**：patch 优先、base 填空、entities/poi 锁步；三目录互斥校验（alias guard，`OverlapGuard`）；损坏 patch 回退 base。
+9. **输入/输出重叠守卫（`OverlapGuard`）**：`Optimizer.run` 与 `WorldMerger.run` 共用的重叠校验单一事实源，
+   在 `--force` 覆盖前拒绝 input==output/嵌套/祖先/符号链接别名，防止不可逆清空源世界；RealFileSystem 走
+   `toRealPath`（解析别名），MemoryFS 走词法 normalize。
+10. **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压总量设 64MB 硬上限（ZLIB/GZIP 有界读取；
+    LZ4 分配前校验声明长度 + 累计校验），超限走安全保留路径（原字节透传 + Pattern 错误），绝不丢弃。
 
 ## 编码规范与质量门槛
 
@@ -101,7 +106,8 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 - 真实 MCA 夹具在 `core/src/test/resources/Fixtures/`（含 `Fixtures/merge/` 合并夹具对，可
   `python tools/gen_merge_fixtures.py` 重新生成）；`TestPaths` 定位磁盘夹具
 - 关键测试类：`Paper26StructureTest`（18 测试，26.1+ 目录结构）、`FixtureCompatibilityTest`、
-  `WorldMergerTest`、`RealMcaMergeTest`（真实 Anvil 夹具全链路）、`MainCliMergeTest`、`MainDispatchTest`
+  `WorldMergerTest`、`RealMcaMergeTest`（真实 Anvil 夹具全链路）、`MainCliMergeTest`、`MainDispatchTest`、
+  `DecompressionBombTest`（解压炸弹防护）、`MainCliE2ETest`（CLI 端到端 12 项）、`OptimizerInputValidationTest`（含重叠守卫）
 - 文件系统/IO 可注入故障：`FailingFileSystem` 模拟 I/O 错误
 
 ## 文档导航与同步
@@ -114,6 +120,7 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 - `docs/real-world-backup-validation.md` — 真实世界备份验证报告
 - `docs/paper-26.1-world-migration-report.md`、`docs/world-directory-structure-comparison.md` — 格式迁移研究
 - `docs/market-positioning-analysis.md` — 市场定位与产品化分析
+- `docs/architecture-review.md` — 架构 + 测试 + CI 综合审查报告（P0–P3 路线图、A1–A20/T1–T13/C1–C23 审计项与修复状态跟踪）
 
 **维护铁律**：修改实现后，必须同步检查 `README.md` 与 `docs/FEATURES.md` 是否过期（CLI 选项、默认值、
 版本号、行为描述）。版本号只改 `gradle/libs.versions.toml`，README/AGENTS.md 里引用的工具链版本需手工核对。
