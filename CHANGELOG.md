@@ -27,6 +27,14 @@
     USER_MANAGED 模式卡在 `VALIDATED` 时自动 `POST /deployment/<id>` 触发发布。
   - 已用真实 secrets 在 CI 诊断 workflow 验证：首个 orphan deployment `PUBLISHED` 即发布 0.3.0，
     后两个因坐标占用 `FAILED`，符合预期；诊断 workflow 已移除。
+- **发布轮询窗口放宽（v0.3.1 发布期实测暴露）**：Portal 后端 `PUBLISHING` 阶段实测约 **13 分钟**
+  （Central 无事故、deployment 无 errors，纯后端慢）。原 `30×15s=7.5min` 窗口超时即 exit 1，
+  导致 CI 红但发布实际成功（假阴性）。放宽到 `60×20s=20min`，并注明仍超时多半是 deployment 卡死、
+  需人工查 Portal，而非正常发布。
+- **v0.3.1 发布结果**：已成功发布至 Maven Central —— repo1 全部 4 产物（jar/sources/javadoc/pom）
+  + `.asc` 签名 HTTP 200，`maven-metadata.xml` 的 `latest`/`release` 更新为 `0.3.1`；GitHub Release
+  v0.3.1 含 `backup.jar` + `.sha256`。release-lib 该次运行显示失败实为轮询窗口假阴性，deployment
+  `9b578ecc` 实际正常 `PUBLISHED`（13:36 → 13:49 UTC，全程无坐标冲突、无需重推 tag）。
 
 ## v0.3.0 (2026-08-20)
 
