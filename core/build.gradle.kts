@@ -158,9 +158,12 @@ signing {
             }
         }
     if (!key.isNullOrBlank()) {
+        // 用 MIME decoder：兼容 env 注入时保留的尾部换行符（basic decoder 会拒绝 whitespace，
+        // 导致解码回退到原始 base64，useInMemoryPgpKeys 拿到非 armored 输入而报
+        // "Cannot find key with id ... in key data"）。
         val decoded =
             runCatching {
-                String(Base64.getDecoder().decode(key), Charsets.UTF_8)
+                String(Base64.getMimeDecoder().decode(key), Charsets.UTF_8)
             }.getOrElse { key }
         useInMemoryPgpKeys(normalizedKeyId, decoded, password)
         sign(publishing.publications["mavenJava"])
