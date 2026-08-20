@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="OrzMCBackup 文档阅读器">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://orzmc.github.io/OrzMCBackup/doc.html">
+<title>文档 — OrzMCBackup</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛏️</text></svg>">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-elev: #161b22;
+  --bg-hover: #1c2128;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-strong: #e6edf3;
+  --text-muted: #8b949e;
+  --green: #3fb950;
+  --green-dark: #238636;
+  --green-soft: rgba(63, 185, 80, 0.10);
+  --green-border: rgba(63, 185, 80, 0.35);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--green); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd { font-family: var(--mono); }
+
+/* ---------- Top nav ---------- */
+.doc-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(13, 17, 23, 0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { max-width: 1180px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--text-strong); font-weight: 600; font-size: 14.5px; white-space: nowrap; }
+.brand:hover { text-decoration: none; }
+.nav-right { display: flex; align-items: center; gap: 16px; margin-left: auto; min-width: 0; }
+.nav-right .doc-name { color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-right a { color: var(--text-muted); font-size: 13.5px; white-space: nowrap; }
+.nav-right a:hover { color: var(--text-strong); text-decoration: none; }
+
+/* ---------- Layout ---------- */
+.layout { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 40px; align-items: start; }
+main { min-width: 0; }
+
+/* ---------- Prose ---------- */
+.prose h1 {
+  font-size: 1.85rem; color: var(--text-strong); font-weight: 700;
+  letter-spacing: 0.3px; line-height: 1.35; margin: 0 0 20px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border);
+}
+.prose h2 {
+  font-size: 1.45rem; color: var(--text-strong); font-weight: 700;
+  margin: 36px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  scroll-margin-top: 80px;
+}
+.prose h3 { font-size: 1.16rem; color: var(--text-strong); font-weight: 600; margin: 28px 0 10px; scroll-margin-top: 80px; }
+.prose h4 { font-size: 1.02rem; color: var(--text-strong); font-weight: 600; margin: 24px 0 8px; scroll-margin-top: 80px; }
+.prose p { margin: 0 0 16px; font-size: 15px; }
+.prose ul, .prose ol { margin: 0 0 16px 24px; font-size: 15px; }
+.prose li { margin: 4px 0; }
+.prose li > ul, .prose li > ol { margin-bottom: 0; }
+.prose a code { color: var(--green); }
+.prose blockquote {
+  margin: 0 0 16px; padding: 2px 18px;
+  border-left: 3px solid var(--green);
+  background: var(--green-soft);
+  border-radius: 0 8px 8px 0;
+  color: var(--text);
+}
+.prose blockquote p { margin: 8px 0; }
+.prose code {
+  font-size: 13px; color: var(--green);
+  background: var(--bg-hover); border: 1px solid var(--border);
+  padding: 1.5px 6px; border-radius: 5px;
+}
+.prose pre {
+  margin: 0 0 16px; padding: 14px 16px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 10px; overflow-x: auto;
+}
+.prose pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 13px; line-height: 1.6; white-space: pre; }
+.prose .table-wrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev); }
+.prose table { border-collapse: collapse; width: 100%; min-width: 640px; }
+.prose th, .prose td { padding: 10px 14px; text-align: left; font-size: 14px; border-bottom: 1px solid var(--border); }
+.prose th { color: var(--text-muted); font-weight: 500; background: var(--bg-hover); white-space: nowrap; }
+.prose td { color: var(--text); vertical-align: top; }
+.prose tbody tr:last-child td { border-bottom: none; }
+.prose hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+.prose img { max-width: 100%; border-radius: 8px; }
+.prose strong { color: var(--text-strong); }
+.prose del { color: var(--text-muted); }
+
+/* ---------- TOC ---------- */
+.toc { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow-y: auto; padding-right: 8px; }
+.toc-title { font-size: 12.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+.toc nav ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
+.toc nav li { margin: 0; }
+.toc nav a {
+  display: block; padding: 4px 0 4px 14px;
+  font-size: 13px; line-height: 1.45; color: var(--text-muted);
+  border-left: 2px solid transparent; margin-left: -1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.toc nav a:hover { color: var(--text-strong); text-decoration: none; border-left-color: var(--green); }
+.toc nav li.active > a { color: var(--green); border-left-color: var(--green); }
+.toc nav ul ul { border-left: none; }
+.toc nav ul ul a { padding-left: 28px; font-size: 12.5px; }
+
+/* ---------- States ---------- */
+.state { padding: 60px 0; text-align: center; color: var(--text-muted); }
+.state h2 { color: var(--text-strong); font-size: 1.3rem; margin-bottom: 12px; }
+.spinner { display: inline-block; width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.back-top {
+  position: fixed; right: 24px; bottom: 24px; z-index: 40;
+  background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; text-decoration: none;
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.back-top.show { opacity: 1; pointer-events: auto; }
+.back-top:hover { color: var(--green); border-color: var(--green-border); text-decoration: none; }
+
+footer { max-width: 1180px; margin: 0 auto; padding: 0 24px 40px; font-size: 13px; color: var(--text-muted); }
+
+@media (max-width: 1024px) {
+  .layout { grid-template-columns: 1fr; }
+  .toc { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="doc-nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html"><span>⛏️</span>OrzMCBackup <span style="color:var(--text-muted);font-weight:400;">文档</span></a>
+    <div class="nav-right">
+      <span class="doc-name" id="docName"></span>
+      <a id="ghLink" href="https://github.com/OrzMC/OrzMCBackup" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="toc" id="toc" hidden>
+    <div class="toc-title">目录</div>
+    <nav id="tocList"></nav>
+  </aside>
+  <main>
+    <article id="content" class="prose">
+      <div class="state" id="loading"><div class="spinner"></div><div>正在加载文档…</div></div>
+    </article>
+  </main>
+</div>
+
+<footer>© 2026 wangzhizhou · OrzMCBackup 文档由 <code>docs/*.md</code> 渲染，<a href="https://github.com/OrzMC/OrzMCBackup/tree/main/docs" target="_blank" rel="noopener">源码</a></footer>
+
+<a class="back-top" id="backTop" href="#" aria-label="返回顶部">↑ 顶部</a>
+
+<script src="vendor/purify.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var content = document.getElementById('content');
+  var toc = document.getElementById('toc');
+  var tocList = document.getElementById('tocList');
+  var docName = document.getElementById('docName');
+  var ghLink = document.getElementById('ghLink');
+  var backTop = document.getElementById('backTop');
+
+  // ---------- 参数解析：仅允许 docs/ 下的普通 .md 文件名 ----------
+  var params = new URLSearchParams(location.search);
+  var file = (params.get('file') || '').trim().replace(/^\.?\//, '');
+  if (!/^[A-Za-z0-9._-]+\.md$/.test(file)) {
+    content.innerHTML = '';
+    var st = document.createElement('div');
+    st.className = 'state';
+    st.innerHTML = '<h2>无法打开文档</h2><p>缺少或非法的 <code>file</code> 参数，请从 <a href="index.html">首页</a> 文档导航进入。</p>';
+    content.appendChild(st);
+    return;
+  }
+
+  docName.textContent = file;
+  ghLink.href = 'https://github.com/OrzMC/OrzMCBackup/blob/main/docs/' + encodeURIComponent(file);
+
+  // ---------- GitHub 风格 slugger（保留 CJK，空格转连字符，去重） ----------
+  var slugCount = {};
+  function slugify(text) {
+    var base = String(text)
+      .toLowerCase()
+      .replace(/<[^>]+>/g, '')
+      .replace(/[^\p{L}\p{N}\s-]/gu, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (!base) base = 'sec';
+    var n = (slugCount[base] || 0) + 1;
+    slugCount[base] = n;
+    return n > 1 ? base + '-' + n : base;
+  }
+
+  // ---------- marked：标题生成 id ----------
+  window.marked.use({
+    renderer: {
+      heading: function (text, level) {
+        var id = slugify(text);
+        return '<h' + level + ' id="' + id + '">' + text + '</h' + level + '>';
+      }
+    }
+  });
+
+  // ---------- 链接重写：文档内 .md 链接 -> doc.html?file=... ----------
+  function rewriteLinks(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('a[href]'), function (a) {
+      var href = a.getAttribute('href') || '';
+      // 站外链接与同页锚点保持原样
+      if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.charAt(0) === '#' || href.charAt(0) === '?') return;
+      var m = href.match(/^(?:\.\/|docs\/)?([A-Za-z0-9._-]+\.md)(#.*)?$/i);
+      if (m) {
+        var target = m[1];
+        var hash = m[2] || '';
+        a.setAttribute('href', 'doc.html?file=' + encodeURIComponent(target) + hash);
+      }
+    });
+  }
+
+  // ---------- 目录构建（h2 / h3） ----------
+  function buildToc() {
+    var heads = content.querySelectorAll('h2, h3');
+    if (heads.length < 2) return;
+    var ul = document.createElement('ul');
+    var parents = { 2: ul, 3: null };
+    var lastH3 = null;
+    Array.prototype.forEach.call(heads, function (h) {
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent.replace(/\s+/g, ' ').trim();
+      li.appendChild(a);
+      if (h.tagName === 'H2') {
+        ul.appendChild(li);
+        parents[3] = null;
+      } else {
+        if (!parents[3]) {
+          parents[3] = document.createElement('ul');
+          ul.lastElementChild.appendChild(parents[3]);
+        }
+        parents[3].appendChild(li);
+      }
+    });
+    tocList.innerHTML = '';
+    tocList.appendChild(ul);
+    toc.hidden = false;
+  }
+
+  // ---------- 加载与渲染 ----------
+  fetch(file)
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function (md) {
+      var html = window.marked.parse(md);
+      var clean = window.DOMPurify.sanitize(html);
+      content.innerHTML = clean;
+      rewriteLinks(content);
+      buildToc();
+      var h1 = content.querySelector('h1');
+      if (h1) {
+        var t = h1.textContent.replace(/\s+/g, ' ').trim();
+        document.title = t + ' — OrzMCBackup';
+      }
+      // 渲染前记住 hash，渲染后跳转锚点
+      if (location.hash) {
+        var el = document.getElementById(location.hash.slice(1));
+        if (el) el.scrollIntoView();
+      }
+    })
+    .catch(function (err) {
+      content.innerHTML = '';
+      var st = document.createElement('div');
+      st.className = 'state';
+      st.innerHTML = '<h2>文档加载失败</h2><p>' + file + ' 读取失败（' + err.message + '）。<br>请返回 <a href="index.html">首页</a> 重试。</p>';
+      content.appendChild(st);
+    });
+
+  // ---------- 目录高亮 + 回到顶部 ----------
+  var tocLinks = [];
+  function highlightToc() {
+    var y = window.scrollY + 120;
+    var cur = null;
+    Array.prototype.forEach.call(content.querySelectorAll('h2, h3'), function (h) {
+      if (h.offsetTop <= y) cur = h.id;
+    });
+    Array.prototype.forEach.call(tocLinks, function (a) {
+      var on = a.getAttribute('href') === '#' + cur;
+      a.parentElement.classList.toggle('active', on);
+    });
+  }
+  window.addEventListener('scroll', function () {
+    backTop.classList.toggle('show', window.scrollY > 400);
+    if (!toc.hidden) highlightToc();
+  }, { passive: true });
+
+  backTop.addEventListener('click', function (e) {
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  // 渲染完成后收集 TOC 链接供高亮用
+  var observe = new MutationObserver(function () {
+    tocLinks = Array.prototype.slice.call(tocList.querySelectorAll('a'));
+  });
+  observe.observe(tocList, { childList: true, subtree: true });
+})();
+</script>
+</body>
+</html>

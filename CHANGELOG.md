@@ -33,6 +33,9 @@
   （0 新文件 / 0 槽位伪造 / 0 锁步违规 / removedChunks 与槽位差严格吻合）、新旧 jar 输出逐字节一致。
 - `README.md` / `docs/index.html` / `docs/market-positioning-analysis.md` /
   `docs/real-world-backup-validation.md` 对齐 18.6GB 真实数据（-88.3% / 92.7% / 0 丢失）。
+- 站点文档可读性：落地页站内文档链接统一走新增的 `docs/doc.html` 渲染器
+  （`doc.html?file=xxx.md`，本地托管 marked + DOMPurify）。修复 `docs/.nojekyll` 下直链 `.md`
+  显示原始文本的问题；跨文档链接、GFM 表格、目录导航均可用，`.md` 保持唯一事实源。
 
 ## v0.2.0 (2026-08-17)
 

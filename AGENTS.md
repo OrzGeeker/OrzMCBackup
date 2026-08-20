@@ -118,6 +118,12 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
 **维护铁律**：修改实现后，必须同步检查 `README.md` 与 `docs/FEATURES.md` 是否过期（CLI 选项、默认值、
 版本号、行为描述）。版本号只改 `gradle/libs.versions.toml`，README/AGENTS.md 里引用的工具链版本需手工核对。
 
+**站点渲染**：GitHub Pages 由 `docs/.nojekyll` 关闭 Jekyll，`.md` 直接访问会显示**原始文本**。
+落地页 `docs/index.html` 的站内文档链接必须统一为 `doc.html?file=xxx.md`（如
+`doc.html?file=threshold-benchmark-report.md`），由 `docs/doc.html`（本地托管的 marked+DOMPurify，
+`docs/vendor/` 为固定版本）客户端渲染。`.md` 仍是唯一事实源；`docs/vendor/` 勿删，新增文档只需在
+落地页按上述格式加链接。
+
 ## 协作规则（多 Agent / 多工具并行）
 
 - **模块边界**：`core` 与 `app` 相对独立。`core` 的公共 API（`OptimizerRequest`/`OutputOptions` 等）变更期间，

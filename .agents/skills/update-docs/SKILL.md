@@ -26,7 +26,9 @@ description: 维护 OrzMCBackup 的文档（README.md / docs/）。修改实现�
 5. **行为声明**：功能声明必须与代码一致。已知易夸大项：`RangePattern`（矩形区域）是**库内类，
    未接入优化器管道与 CLI**，文档不得声称 CLI 支持矩形范围
 6. **链接**：所有相对链接（`LICENSE`、`docs/`、`CONTRIBUTING.md`、`SECURITY.md`、
-   `gradle/libs.versions.toml` 等）必须指向真实存在的文件
+   `gradle/libs.versions.toml` 等）必须指向真实存在的文件。**落地页 `docs/index.html` 的站内文档
+   链接统一为 `doc.html?file=xxx.md`**（`docs/.nojekyll` 下直链 `.md` 会显示原始文本，不可读）；
+   由 `docs/doc.html` + `docs/vendor/` 客户端渲染，`.md` 保持唯一事实源
 7. **配置签名**：库用法示例的构造参数个数/类型必须与 `OptimizerConfig.kt` 一致（如
    `OutputOptions` 为 5 参：`inPlace, zipOutput, force, copyMisc, dryRun`）
 
