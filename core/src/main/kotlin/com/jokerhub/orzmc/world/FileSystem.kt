@@ -95,7 +95,9 @@ object RealFileSystem : FileSystem {
     }
 
     override fun walk(path: Path): List<Path> {
-        val s = Files.walk(path)
+        // FOLLOW_LINKS：世界目录可能是符号链接（如 Folia 测试服 world → 外部真实目录）。
+        // 不跟随链接时 Files.walk 不会进入链接目标 → 维度/region 全部不可见 → 备份空跑假完成。
+        val s = Files.walk(path, java.nio.file.FileVisitOption.FOLLOW_LINKS)
         return try {
             s.collect(
                 java.util.stream.Collectors
