@@ -1,0 +1,20 @@
+name: diag-deployment-status
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query orphan deployment statuses
+        env:
+          CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
+          CENTRAL_PORTAL_UPLOAD_URL: ${{ secrets.CENTRAL_PORTAL_UPLOAD_URL }}
+        run: |
+          PORTAL_BASE="${CENTRAL_PORTAL_UPLOAD_URL%%/api/v1/publisher/upload*}"
+          STATUS_URL="${PORTAL_BASE}/api/v1/publisher/status"
+          for ID in b3a2b4b0-e42e-4f3d-88f9-cdf8b43c4c20 dd6821d9-f72a-4b0e-ad9c-d63800e803fa 335efedf-98f2-4477-a023-a7b1cbe7008e; do
+            echo "=== $ID ==="
+            curl -sS -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${ID}"
+            echo
+          done
