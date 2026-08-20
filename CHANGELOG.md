@@ -65,6 +65,14 @@
 - **Dependabot grouping（C21）**：`dependabot.yml` 按领域聚合 gradle 依赖更新（quality-tooling /
   kotlin-and-coroutines / runtime-and-test）+ actions 单组，避免 10 个独立 PR × 全矩阵 churn。
 
+### Dependencies (D1)
+- **lz4-java 坐标迁移**：`org.lz4:lz4-java` 项目已官方重定位到 `at.yawk.lz4:lz4-java`（原坐标真实版本
+  止于 `1.8.0`，`1.8.1` 仅为 relocation 占位符 POM，无真实 jar）。Gradle 对 Maven relocation 的
+  capability 冲突处理会把新旧两模块同时放入依赖图，导致解析失败并连带 config-cache 序列化报错
+  （`__classpathSnapshot__` 无法写入）。迁移至 `at.yawk.lz4:lz4-java:1.11.2`——包结构
+  `net.jpountz.lz4` / `net.jpountz.xxhash` 与 `Automatic-Module-Name: org.lz4.java` 均不变，
+  纯 catalog 改动、无代码变更；`:core:test :app:test` 全绿，config-cache 恢复可存储。
+
 ### Security (A2)
 - **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压后数据总量设硬上限
   `MAX_UNCOMPRESSED_CHUNK_LENGTH`（64MB，远高于任何合法 chunk payload < 1MB）。此前压缩长度上限
