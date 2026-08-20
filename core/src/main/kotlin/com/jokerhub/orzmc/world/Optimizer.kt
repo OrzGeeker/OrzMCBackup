@@ -206,7 +206,7 @@ object DefaultOptimizer : OptimizerEngine {
 
         if (!request.outputOptions.dryRun) {
             if (request.outputOptions.inPlace) {
-                handleInPlaceReplacement(fs, tasks, input, out)
+                handleInPlaceReplacement(fs, tasks, input, out) { p, k, m -> record(p, k, m) }
             } else {
                 if (request.outputOptions.copyMisc) {
                     copyMiscFiles(ctx, miscSources, request, dimSet)
@@ -354,12 +354,12 @@ object DefaultOptimizer : OptimizerEngine {
         return result.copy(processed = result.processed - startProcessed)
     }
 
-    @Suppress("ThrowsCount")
     private fun handleInPlaceReplacement(
         fs: FileSystem,
         tasks: List<Path>,
         input: Path,
         out: Path,
+        record: (Path, String, String) -> Unit,
     ) {
         tasks.forEach { dim ->
             val rel = input.relativize(dim)
@@ -372,7 +372,10 @@ object DefaultOptimizer : OptimizerEngine {
                 try {
                     fs.createDirectories(dst)
                 } catch (e: IOException) {
-                    throw InPlaceReplacementException("Failed to create target directory: $dst", e)
+                    record(dst, "InPlace", "Failed to create target directory: $dst: ${e.message}")
+                    // 目标目录无法创建时中止该子树的替换：继续 clean/copy 会把输入世界清空。
+                    // 原契约「createDirectories 失败输入不受影响」在 A6 收集不抛后仍保留。
+                    return@dimLoop
                 }
                 val keep = HashSet<String>()
                 fs.list(src).filter { it.toString().endsWith(".mca") }.forEach { keep.add(it.fileName.toString()) }
@@ -382,7 +385,7 @@ object DefaultOptimizer : OptimizerEngine {
                             if (!keep.contains(p.fileName.toString())) fs.deleteIfExists(p)
                         }
                     } catch (e: IOException) {
-                        throw InPlaceReplacementException("Failed to clean target directory: $dst", e)
+                        record(dst, "InPlace", "Failed to clean target directory: $dst: ${e.message}")
                     }
                 }
                 try {
@@ -391,15 +394,15 @@ object DefaultOptimizer : OptimizerEngine {
                         fs.copy(p, target, true)
                     }
                 } catch (e: IOException) {
-                    throw InPlaceReplacementException("Failed to copy files to target directory: $dst", e)
+                    record(dst, "InPlace", "Failed to copy files to target directory: $dst: ${e.message}")
                 }
             }
         }
         try {
             val ok = fs.deleteTreeWithRetry(out, 5, 500)
-            if (!ok) throw IOException("cleanup failed")
+            if (!ok) record(out, "InPlace", "Failed to clean up temp directory: $out: cleanup failed")
         } catch (e: IOException) {
-            throw InPlaceReplacementException("Failed to clean up temp directory: $out", e)
+            record(out, "InPlace", "Failed to clean up temp directory: $out: ${e.message}")
         }
     }
 

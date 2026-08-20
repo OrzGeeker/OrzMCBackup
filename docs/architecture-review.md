@@ -345,6 +345,7 @@ P0 条目已在审查当轮实施；P1 条目已按路线图顺序实施（并�
 | A3 并行错误收集线程安全 | ✅ 已实施 | `errors` 由 `ArrayList` 改 `CopyOnWriteArrayList`（region 并行 worker 并发 record） |
 | A4 MetricsSink 双重计数 | ✅ 已实施 | 移除按维度 incProcessed/incRemoved，指标只在 `run()` 以最终报告上报一次 |
 | A5 并行度平方 | ✅ 已实施 | 移除维度层并行，并行度只在 region 层生效（热点路径，单盘无增益） |
+| A6 错误处理模型统一 | ✅ 已实施 | in-place 替换失败由抛 `InPlaceReplacementException` 冒泡改为记录 InPlace 错误进 `report.errors`（与 resolveOutputDir/copyMiscFiles/handleZipOutput 收集不抛一致）；createDirectories 失败跳过该子树保持输入不受影响；删除 `InPlaceReplacementException` 异常类 |
 | C9 Portal 异步上传验证 | ✅ 已实施 | 解析 `deploymentId` + 轮询 `/api/v1/publisher/status` 至 SUCCESS/FAILED，FAILED 即 exit 1 |
 | C10 GPG 私钥经 env 注入 | ✅ 已实施 | `ORG_GRADLE_PROJECT_signingKey` 环境变量；build.gradle 兼容非点号属性 |
 | C11 release 缺 lint/detekt 门禁 | ✅ 已实施 | release-lib / release-app 测试前加 `ktlintCheck detekt` |
@@ -359,7 +360,7 @@ P0 条目已在审查当轮实施；P1 条目已按路线图顺序实施（并�
 | T5 报告解析回读 | ✅ 已实施 | `JsonTestParser` 最小严格解析器，报告输出证明为合法 JSON（不再仅 contains） |
 | T6 backup CLI 选项补测 | ✅ 已实施 | E2E 追加 remove-unknown / parallelism>1 / zip 语义 |
 | T7 merge CLI 错误路径 | ✅ 已实施 | E2E 追加 alias 拒绝、并行==串行逐字节一致、非法 progress-mode 拒绝 |
-| T8 in-place 失败契约 | ✅ 已实施 | `OptimizerInPlaceFailureTest`：copy / cleanup / createDirectories 失败均抛 `InPlaceReplacementException` |
+| T8 in-place 失败契约 | ✅ 已实施 | `OptimizerInPlaceFailureTest`：copy / cleanup / createDirectories 失败记录 InPlace 错误进 `report.errors` 不抛（A6 统一收集）；createDirectories 失败输入不受影响 |
 | T9 并行确定性 | ✅ 已实施 | `WorldMergerTest` 8 region × parallelism 4 多轮输出逐字节一致且等于串行 |
 | 质量门禁 koverVerify → check | ✅ 已实施 | core/app `tasks.check { dependsOn("koverVerify") }`，阈值不达标即 fail |
 | C5 构建缓存 | ✅ 已实施 | `settings.gradle.kts` 显式 `buildCache { local }`；本地缓存目录由 setup-gradle 的 Actions 缓存持久化，实现跨 job / 跨 PR 复用 |

@@ -6,7 +6,6 @@ import com.jokerhub.orzmc.util.McaMemoryBuilder.MemChunk
 import com.jokerhub.orzmc.world.FileSystem
 import com.jokerhub.orzmc.world.FilterOptions
 import com.jokerhub.orzmc.world.IOOptions
-import com.jokerhub.orzmc.world.InPlaceReplacementException
 import com.jokerhub.orzmc.world.McaIOFactory
 import com.jokerhub.orzmc.world.McaReaderLike
 import com.jokerhub.orzmc.world.McaWriterLike
@@ -17,7 +16,6 @@ import com.jokerhub.orzmc.world.OptimizerRequest
 import com.jokerhub.orzmc.world.OutputOptions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.IOException
@@ -26,11 +24,13 @@ import java.nio.file.Paths
 
 /**
  * T8: in-place replacement (Optimizer.handleInPlaceReplacement) was only ever exercised on
- * the happy path. These tests pin the contract that any IOException while creating the
- * target directory, copying files back into the input, or cleaning the temp directory
- * aborts the run with [InPlaceReplacementException] — never silently leaving a half-replaced
- * world — and that the success path removes stale (fully-pruned) regions while replacing
- * entities/poi in place.
+ * the happy path. These tests pin the contract (A6) that any IOException while creating the
+ * target directory, copying files back into the input, or cleaning the temp directory is
+ * *recorded* as an `OptimizeError` in the report (kind "InPlace") rather than thrown out of
+ * [Optimizer.run] — matching the collect-don't-throw model of every other error path
+ * (resolveOutputDir, copyMiscFiles, handleZipOutput). Under `--strict` the recorded error
+ * surfaces as a non-zero exit. The success path removes stale (fully-pruned) regions while
+ * replacing entities/poi in place.
  *
  * The failure tests wrap [MemoryFS] in a [FailingFileSystem], so the MCA io factory must be
  * [UnwrappingIOFactory] — [MemoryMcaIOFactory] casts the fs to [MemoryFS] directly, which a
@@ -110,6 +110,17 @@ class OptimizerInPlaceFailureTest {
         ),
     )
 
+    private fun assertInPlaceError(
+        report: com.jokerhub.orzmc.world.OptimizeReport,
+        fragment: String,
+    ) {
+        assertTrue(report.errors.isNotEmpty(), "expected a recorded InPlace error, got: $report")
+        assertTrue(
+            report.errors.any { it.kind == "InPlace" && it.message.contains(fragment) },
+            "expected an InPlace error containing '$fragment', got: ${report.errors}",
+        )
+    }
+
     @Test
     fun `successful in-place run removes stale regions and replaces entities and poi`() {
         buildWorld()
@@ -129,25 +140,26 @@ class OptimizerInPlaceFailureTest {
     }
 
     @Test
-    fun `copy failure during replacement throws InPlaceReplacementException`() {
+    fun `copy failure during replacement is recorded in report errors`() {
         buildWorld()
         val failing = FailingFileSystem(fs, "copy")
 
-        val ex = assertThrows(InPlaceReplacementException::class.java) { runInPlace(failing, UnwrappingIOFactory()) }
+        val report = runInPlace(failing, UnwrappingIOFactory())
 
-        assertTrue(ex.message!!.contains("copy"), ex.message)
+        // A6: collect-don't-throw — the run completes and reports the failure structurally.
+        assertInPlaceError(report, "copy")
         // The surviving region is untouched by the failed copy.
         assertEquals(2, slotCount(world.resolve("region").resolve("r.0.0.mca")))
     }
 
     @Test
-    fun `cleanup failure after replacement throws InPlaceReplacementException`() {
+    fun `cleanup failure after replacement is recorded in report errors`() {
         buildWorld()
         val failing = FailingFileSystem(fs, "deleteTreeWithRetry")
 
-        val ex = assertThrows(InPlaceReplacementException::class.java) { runInPlace(failing, UnwrappingIOFactory()) }
+        val report = runInPlace(failing, UnwrappingIOFactory())
 
-        assertTrue(ex.message!!.contains("clean"), ex.message)
+        assertInPlaceError(report, "clean")
         // Replacement happens before cleanup, so the input reflects the filtered output even
         // though the temp directory could not be removed.
         assertEquals(1, slotCount(world.resolve("region").resolve("r.0.0.mca")))
@@ -155,13 +167,13 @@ class OptimizerInPlaceFailureTest {
     }
 
     @Test
-    fun `createDirectories failure for the input region throws InPlaceReplacementException`() {
+    fun `createDirectories failure for the input region is recorded in report errors`() {
         buildWorld()
         val failing = FailCreateDirectoriesFor(fs, world.resolve("region"))
 
-        val ex = assertThrows(InPlaceReplacementException::class.java) { runInPlace(failing, UnwrappingIOFactory()) }
+        val report = runInPlace(failing, UnwrappingIOFactory())
 
-        assertTrue(ex.message!!.contains("create"), ex.message)
+        assertInPlaceError(report, "create")
         assertEquals(2, slotCount(world.resolve("region").resolve("r.0.0.mca")), "input must be left untouched")
     }
 }

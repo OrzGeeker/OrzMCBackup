@@ -15,7 +15,11 @@
 - **MemoryFS 路径组件匹配（A18）**：`list`/`walk` 由字符串前缀匹配改为 `Path` 组件级匹配，修复
   Windows `\` 分隔下「/mem/world` 误含 `/mem/world2`」的真实 bug。新增 `MemoryFSTest` 3 项。
 
-### Robustness (A16/A17/A19/A20)
+### Robustness (A6/A16/A17/A19/A20)
+- **错误处理模型统一（A6）**：in-place 替换失败由抛 `InPlaceReplacementException` 冒泡出 `run()`
+  改为记录 InPlace 错误进 `OptimizeReport.errors`，与其余错误路径（resolveOutputDir / copyMiscFiles /
+  handleZipOutput）的「收集不抛」模型一致；`createDirectories` 失败跳过该子树替换，输入世界不受影响；
+  删除 `InPlaceReplacementException` 异常类。`--strict` 下错误升级为退出码 1 的语义不变。
 - **ForceLoad FileSystem 感知（A16）**：`ForceLoad.parse(fs, dim, strict)` 直接经 `FileSystem` 读取
   force-load 文件（`Optimizer` 的 MemoryFS 路径不再落盘）；`NbtForceLoader` 新增 `parse(bytes)` 字节重载。
 - **copy 不跟随符号链接（A17）**：`RealFileSystem.copy` 加 `NOFOLLOW_LINKS`，链接按链接复制而非目标。
@@ -60,6 +64,14 @@
   `com.pinterest.ktlint:ktlint-cli:14.2.0`，杜绝 hook 与项目版本漂移。
 - **Dependabot grouping（C21）**：`dependabot.yml` 按领域聚合 gradle 依赖更新（quality-tooling /
   kotlin-and-coroutines / runtime-and-test）+ actions 单组，避免 10 个独立 PR × 全矩阵 churn。
+
+### Dependencies (D1)
+- **lz4-java 坐标迁移**：`org.lz4:lz4-java` 项目已官方重定位到 `at.yawk.lz4:lz4-java`（原坐标真实版本
+  止于 `1.8.0`，`1.8.1` 仅为 relocation 占位符 POM，无真实 jar）。Gradle 对 Maven relocation 的
+  capability 冲突处理会把新旧两模块同时放入依赖图，导致解析失败并连带 config-cache 序列化报错
+  （`__classpathSnapshot__` 无法写入）。迁移至 `at.yawk.lz4:lz4-java:1.11.2`——包结构
+  `net.jpountz.lz4` / `net.jpountz.xxhash` 与 `Automatic-Module-Name: org.lz4.java` 均不变，
+  纯 catalog 改动、无代码变更；`:core:test :app:test` 全绿，config-cache 恢复可存储。
 
 ### Security (A2)
 - **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压后数据总量设硬上限

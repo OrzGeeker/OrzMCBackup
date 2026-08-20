@@ -172,8 +172,10 @@ java -jar backup.jar merge BASE PATCH OUTPUT [options]
 | `merge` | 合并完成且无错误 | 存在任何错误（merge 无 `--strict`，任一错误即失败） |
 
 > ⚠️ 实测要点：`backup` 默认**非 strict**——即使记录到错误（如输出目录已存在、损坏 region），
-> 退出码仍为 0，错误只体现在报告 `errors` / `--report` 输出中。**脚本自动化请始终使用 `--strict`，
-> 或自行检查报告 `errors` 数组**，否则损坏数据可能被静默跳过而脚本仍"成功"退出。
+> 退出码仍为 0，错误只体现在报告 `errors` / `--report` 输出中。**in-place 替换阶段的失败同样只记录
+> `InPlace` 错误**（目标目录创建 / 文件复制 / 临时目录清理），非 strict 下退出码仍为 0，且可能留下部分
+> 替换状态。**脚本自动化请始终使用 `--strict`，或自行检查报告 `errors` 数组**，否则损坏数据可能被
+> 静默跳过而脚本仍"成功"退出。
 
 ---
 

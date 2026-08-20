@@ -357,7 +357,6 @@ Minecraft Java 版世界优化工具，双用途：
 | `OutputNotEmptyException` | 输出目录非空且未设置 `--force` |
 | `OutputAccessDeniedException` | 输出目录无写入权限 |
 | `CompressionFailedException` | ZIP 打包失败 |
-| `InPlaceReplacementException` | 原地替换阶段 I/O 错误 |
 | `InvalidWorldStructureException` | 世界目录结构不符合预期 |
 | `ForceLoadedParseException` | 强制加载文件解析失败 |
 | `AggregateOptimizeException` | 收集多个 `OptimizeError` 统一上报 |
@@ -487,7 +486,7 @@ Minecraft Java 版世界优化工具，双用途：
 
 ### 依赖
 
-- **核心运行时**：Kotlin stdlib、`org.lz4:lz4-java:1.8.0`
+- **核心运行时**：Kotlin stdlib、`at.yawk.lz4:lz4-java:1.11.2`
 - **并发**：`kotlinx-coroutines-core:1.11.0`
 - **CLI**：`info.picocli:picocli:4.7.7`
 - **测试**：JUnit Jupiter 6.1.3 + Platform Launcher
