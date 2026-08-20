@@ -131,13 +131,38 @@ class McaEntry(
         val (method, data, _) = dataBytes()
         return when (method) {
             CompressionMethod.RAW -> data
-            CompressionMethod.ZLIB -> InflaterInputStream(data.inputStream()).use { it.readBytes() }
-            CompressionMethod.GZIP -> GZIPInputStream(data.inputStream()).use { it.readBytes() }
+            CompressionMethod.ZLIB -> InflaterInputStream(data.inputStream()).use { readBounded(it) }
+            CompressionMethod.GZIP -> GZIPInputStream(data.inputStream()).use { readBounded(it) }
             CompressionMethod.LZ4 -> decodeLZ4Blocks(data)
             CompressionMethod.UNKNOWN ->
                 throw IllegalArgumentException("unknown compression: $method")
             else -> ByteArray(0)
         }
+    }
+
+    /**
+     * Reads [input] to EOF with a hard cap on the total decompressed size.
+     *
+     * Guard against decompression bombs: the compressed length is bounded by
+     * [MAX_VALID_CHUNK_LENGTH], but a tiny high-ratio payload (e.g. all zeros) can
+     * expand to gigabytes, OOM-ing the process. [MAX_UNCOMPRESSED_CHUNK_LENGTH] is
+     * far above any legitimate chunk payload; exceeding it means the chunk is
+     * corrupt or malicious, and the caller's safe-keep path preserves the original bytes.
+     */
+    private fun readBounded(input: java.io.InputStream): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0L
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > MAX_UNCOMPRESSED_CHUNK_LENGTH) {
+                throw IllegalArgumentException("chunk decompressed data exceeds $MAX_UNCOMPRESSED_CHUNK_LENGTH bytes")
+            }
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
     }
 
     fun isExternal(): Boolean {
@@ -151,6 +176,12 @@ class McaEntry(
     companion object {
         /** 合法 chunk 数据最大长度（压缩后）。MC 单 chunk 压缩后 < 1MB（更大走 .mcc 外部文件），8MB 为安全阈值。 */
         private const val MAX_VALID_CHUNK_LENGTH = 8 * 1024 * 1024
+
+        /**
+         * 单个 chunk 解压后最大合法字节数（解压炸弹防护）。真实 MC chunk 解压后通常 < 1MB；
+         * 64MB 远高于任何合法 payload，超限即视为损坏/恶意数据，走安全保留路径。
+         */
+        const val MAX_UNCOMPRESSED_CHUNK_LENGTH = 64 * 1024 * 1024
 
         private val LZ4_MAGIC = "LZ4Block".toByteArray()
         private const val LZ4_HEADER_LEN = 8 + 1 + 4 + 4 + 4
@@ -187,6 +218,9 @@ class McaEntry(
                 val checksumLe = ByteBuffer.wrap(inp, i + 17, 4).order(ByteOrder.LITTLE_ENDIAN).int
                 val start = i + LZ4_HEADER_LEN
                 if (start + compLen > inp.size) throw IllegalArgumentException("LZ4 block truncated")
+                if (decompLen < 0 || decompLen > MAX_UNCOMPRESSED_CHUNK_LENGTH) {
+                    throw IllegalArgumentException("LZ4 block declares oversized decompressed length: $decompLen")
+                }
                 val block = inp.copyOfRange(start, start + compLen)
                 val decoded =
                     when (method) {
@@ -199,6 +233,11 @@ class McaEntry(
 
                         else -> throw IllegalArgumentException("unsupported LZ4 method")
                     }
+                if (out.size().toLong() + decoded.size > MAX_UNCOMPRESSED_CHUNK_LENGTH) {
+                    throw IllegalArgumentException(
+                        "LZ4 chunk decompressed data exceeds $MAX_UNCOMPRESSED_CHUNK_LENGTH bytes",
+                    )
+                }
                 val checksum = (xxh32(decoded, LZ4_XXHASH_SEED) and 0x0FFFFFFF)
                 if (checksum != checksumLe) throw IllegalArgumentException("LZ4 checksum mismatch")
                 out.write(decoded)
