@@ -109,10 +109,13 @@ jobs:
           # VALIDATED/PUBLISHING/PUBLISHED/FAILED。USER_MANAGED 模式下停在 VALIDATED，需手动
           # POST deployment/<id> 触发发布（204）。upload 未指定 publishingType 时默认 AUTOMATIC，
           # 无需手动 publish，但兜底覆盖两种模式。
+          # v0.3.1 实测：Portal PUBLISHING 阶段可长达 12+ 分钟（无 errors，Central 后端慢）。
+          # 原 30×15s=7.5min 窗口会误判 timeout（deployment 实际仍在发布，假阴性）。
+          # 放宽到 60×20s=20min；仍超时则多半是 deployment 卡死，需人工查 Portal。
           published=0
           attempts=0
           publish_sent=0
-          while [ $attempts -lt 30 ]; do
+          while [ $attempts -lt 60 ]; do
             status_resp=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${DEPLOYMENT_ID}" || true)
             state=$(echo "$status_resp" | sed -n 's/.*"deploymentState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\r')
             echo "Portal state: ${state:-<empty>} (attempt $((attempts+1))/30)"
