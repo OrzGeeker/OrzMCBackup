@@ -27,8 +27,16 @@ interface FileSystem {
     /** List direct children of [path]. Order is unspecified. */
     fun list(path: Path): List<Path>
 
-    /** Recursively walk all descendants of [path]. */
-    fun walk(path: Path): List<Path>
+    /**
+     * Recursively walk all descendants of [path].
+     *
+     * @param followLinks if true, follow symbolic links (e.g. a symlinked world directory).
+     *   Defaults to false so delete paths never traverse into a link's target.
+     */
+    fun walk(
+        path: Path,
+        followLinks: Boolean = false,
+    ): List<Path>
 
     /** Create directory and any missing parents. */
     fun createDirectories(path: Path)
@@ -94,10 +102,20 @@ object RealFileSystem : FileSystem {
         }
     }
 
-    override fun walk(path: Path): List<Path> {
-        // FOLLOW_LINKS：世界目录可能是符号链接（如 Folia 测试服 world → 外部真实目录）。
-        // 不跟随链接时 Files.walk 不会进入链接目标 → 维度/region 全部不可见 → 备份空跑假完成。
-        val s = Files.walk(path, java.nio.file.FileVisitOption.FOLLOW_LINKS)
+    override fun walk(
+        path: Path,
+        followLinks: Boolean,
+    ): List<Path> {
+        // FOLLOW_LINKS 仅在调用方显式请求时开启（维度发现/计数/复制需要进入 symlink 目标，
+        // 如 Folia 测试服 world → 外部真实目录；不跟随时链接目标内的 dimensions/region 不可见，
+        // 备份会空跑假完成）。删除路径必须保持默认不跟随，避免 deleteIfExists 穿链接删掉
+        // 目标目录内的文件。
+        val s =
+            if (followLinks) {
+                Files.walk(path, java.nio.file.FileVisitOption.FOLLOW_LINKS)
+            } else {
+                Files.walk(path)
+            }
         return try {
             s.collect(
                 java.util.stream.Collectors
@@ -189,7 +207,10 @@ class MemoryFS : FileSystem {
 
     override fun list(path: Path): List<Path> = nodes.keys.filter { key -> key.parent == path }
 
-    override fun walk(path: Path): List<Path> = nodes.keys.filter { it.startsWith(path) }
+    override fun walk(
+        path: Path,
+        followLinks: Boolean,
+    ): List<Path> = nodes.keys.filter { it.startsWith(path) }
 
     override fun createDirectories(path: Path) {
         nodes[path] = NodeType.DIRECTORY
