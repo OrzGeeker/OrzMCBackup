@@ -46,9 +46,12 @@ class FailingFileSystem(
         return delegate.list(path)
     }
 
-    override fun walk(path: Path): List<Path> {
+    override fun walk(
+        path: Path,
+        followLinks: Boolean,
+    ): List<Path> {
         maybeFail("walk")
-        return delegate.walk(path)
+        return delegate.walk(path, followLinks)
     }
 
     override fun createDirectories(path: Path) {

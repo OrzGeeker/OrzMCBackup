@@ -67,7 +67,7 @@ object DefaultOptimizer : OptimizerEngine {
         val tasks = mutableListOf<Path>()
         if (isDimensionDir(fs, root)) tasks.add(root)
         fs
-            .walk(root)
+            .walk(root, followLinks = true)
             .filter { it != root && fs.isDirectory(it) && isDimensionDir(fs, it) }
             .forEach { tasks.add(it) }
         return tasks
@@ -281,7 +281,7 @@ object DefaultOptimizer : OptimizerEngine {
         val reserved = setOf("region", "entities", "poi")
         val matchers = skipMatchers()
         sources.forEach { dir ->
-            for (p in fs.walk(dir)) {
+            for (p in fs.walk(dir, followLinks = true)) {
                 if (miscRel(dir, p, excludePaths, reserved, matchers) == null) continue
                 c += 1
             }
@@ -438,7 +438,7 @@ object DefaultOptimizer : OptimizerEngine {
             val rel = ctx.input.relativize(dir)
             val outDir = ctx.out.resolve(rel)
             ctx.fs.createDirectories(outDir)
-            for (p in ctx.fs.walk(dir)) {
+            for (p in ctx.fs.walk(dir, followLinks = true)) {
                 val relPath = miscRel(dir, p, excludePaths, reserved, matchers) ?: continue
                 val target = outDir.resolve(relPath)
                 if (ctx.fs.isDirectory(p)) {
