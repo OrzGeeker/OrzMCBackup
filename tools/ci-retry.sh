@@ -6,16 +6,17 @@
 # 重试即可恢复；而真实失败（测试断言、编译、风格检查等）必须立即上报。
 #
 # 用法：bash tools/ci-retry.sh <command> [args...]
-# 环境变量：RETRY_MAX_ATTEMPTS（默认 3）、RETRY_BACKOFF（默认 15 秒）
+# 环境变量：RETRY_MAX_ATTEMPTS（默认 5）、RETRY_BACKOFF（默认 10 秒，指数退避基数）
 set -u
 
-max_attempts="${RETRY_MAX_ATTEMPTS:-3}"
-backoff="${RETRY_BACKOFF:-15}"
+max_attempts="${RETRY_MAX_ATTEMPTS:-5}"
+base_backoff="${RETRY_BACKOFF:-10}"
 
 # 依赖下载类瞬时错误特征（命中才重试）
+# C14: 补全网关层状态码（5xx）与 codeload 特征 —— 冷缓存并发时 GitHub 拉取也可能 502/503
 retriable() {
   local re
-  re='could not (resolve|get|download|list)|too many requests|429|connection (refused|reset|timed out)|remote host closed connection|socket (read|write) timed out|unable to resolve host|read timed out|unknown host'
+  re='could not (resolve|get|download|list)|too many requests|429|50[234]|connection (refused|reset|timed out)|remote host closed connection|socket (read|write) timed out|unable to resolve host|read timed out|unknown host|bad gateway|service unavailable|gateway timeout|codeload'
   grep -qiE "$re" <<< "$1"
 }
 
@@ -42,9 +43,13 @@ while :; do
     exit "${rc}"
   fi
 
-  echo "Transient dependency-download failure on attempt ${attempt}; retrying in ${backoff}s..."
+  # C15: 指数退避 + jitter —— base * 2^(attempt-1) * (0.5~1.5)。
+  # 冷缓存时多个矩阵 job 并发重试，加随机抖动避免同拍集中打爆限流窗口。
+  wait_secs=$((base_backoff * (1 << (attempt - 1))))
+  wait_secs=$((wait_secs * (50 + RANDOM % 101) / 100))
+  echo "Transient dependency-download failure on attempt ${attempt}; retrying in ~${wait_secs}s..."
   tail -n 25 "$log"
   rm -f "$log"
-  sleep "${backoff}"
+  sleep "${wait_secs}"
   attempt=$((attempt + 1))
 done

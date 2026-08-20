@@ -362,6 +362,11 @@ P0 条目已在审查当轮实施；P1 条目已按路线图顺序实施（并�
 | T8 in-place 失败契约 | ✅ 已实施 | `OptimizerInPlaceFailureTest`：copy / cleanup / createDirectories 失败均抛 `InPlaceReplacementException` |
 | T9 并行确定性 | ✅ 已实施 | `WorldMergerTest` 8 region × parallelism 4 多轮输出逐字节一致且等于串行 |
 | 质量门禁 koverVerify → check | ✅ 已实施 | core/app `tasks.check { dependsOn("koverVerify") }`，阈值不达标即 fail |
+| C5 构建缓存 | ✅ 已实施 | `settings.gradle.kts` 显式 `buildCache { local }`；本地缓存目录由 setup-gradle 的 Actions 缓存持久化，实现跨 job / 跨 PR 复用 |
+| C14 ci-retry 正则补全 | ✅ 已实施 | `ci-retry.sh` 正则追加 `50[234]`、`Bad Gateway`、`Gateway Timeout`、`codeload` |
+| C15 ci-retry 指数退避 | ✅ 已实施 | `base * 2^(attempt-1) * jitter(0.5~1.5)`，默认重试 5 次 |
+| C18 pre-commit ktlint 固定 | ✅ 已实施 | `.pre-commit-config.yaml` 钉死 `ktlint-cli:14.2.0` |
+| C21 Dependabot grouping | ✅ 已实施 | `dependabot.yml` 按领域聚合 gradle 依赖 + actions 单组 |
 
 P2 条目已按路线图实施（性能 → 健壮性 → 架构 → 测试 → CI/工程）：
 
@@ -394,4 +399,4 @@ P2 条目已按路线图实施（性能 → 健壮性 → 架构 → 测试 → 
 | C20 setup-gradle 版本统一 | ✅ 已实施 | 三工作流统一 `@v6.2.0` |
 | C22 .gitattributes | ✅ 已实施 | `*.sh text eol=lf` + 文本类扩展名显式声明 |
 
-剩余待办（不在本轮 P2 范围）：C21 Dependabot grouping、C13 Portal 发布后回下载验证、C5 构建缓存远程化、P3 其余条目。
+剩余待办：C8 detekt 2.0 正式版升级（2.0 正式版发布后）；C9/C13 Portal 发布后回下载验证（待真正发布时执行）；P3 其余条目。

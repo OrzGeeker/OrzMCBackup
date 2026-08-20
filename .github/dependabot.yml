@@ -17,6 +17,23 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
+    # C21: 按领域分组聚合依赖更新，避免 N 个独立 PR × 全矩阵 churn。
+    # 一个依赖只归入第一个匹配的 group，故 quality-tooling 必须在前（kover 在 kotlinx 命名空间下）。
+    groups:
+      quality-tooling:
+        patterns:
+          - "com.pinterest.ktlint*"
+          - "io.gitlab.arturbosch.detekt*"
+          - "org.jetbrains.kotlinx.kover*"
+      kotlin-and-coroutines:
+        patterns:
+          - "org.jetbrains.kotlin*"
+      runtime-and-test:
+        patterns:
+          - "org.lz4*"
+          - "info.picocli*"
+          - "org.junit*"
+          - "org.jetbrains.dokka*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -31,3 +48,8 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+    # C21: Actions 生态体量小，全部聚合为单个 PR 即可
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"

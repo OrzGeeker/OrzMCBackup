@@ -39,7 +39,7 @@
   夹具缺失即失败，与其它夹具测试行为一致。
 - **NBT 深度边界（T13）**：`NbtForceLoaderTest` 增深度超限拒绝（`maxCompoundDepth` 生效）+ 边界内正常解析。
 
-### CI (C6/C7/C8/C12/C16/C19/C20/C22)
+### CI (C5/C6/C7/C8/C12/C14/C15/C16/C18/C19/C20/C21/C22)
 - **缓存去重（C6）**：移除 setup-java `cache: gradle`，Gradle 依赖缓存统一由 setup-gradle 承担。
 - **命令合并（C7）**：lint 两步并为 `ktlintCheck detekt`；coverage 生成 + 验证并为一条命令，省一次 JVM 启停。
 - **detekt 版本（C8）**：2.0 正式版未发布（最新 alpha.3 < 当前 alpha.6），保持 `2.0.0-alpha.6`；
@@ -50,6 +50,16 @@
 - **权限最小化（C19）**：release-lib 补 `permissions: contents: read`（test-matrix 已有）。
 - **版本统一（C20）**：三工作流 setup-gradle 统一 `@v6.2.0`。
 - **.gitattributes（C22）**：新增 `*.sh text eol=lf` 等换行约束，避免 Windows 检出 CRLF 破坏脚本。
+- **构建缓存（C5）**：`settings.gradle.kts` 显式 `buildCache { local }`；本地缓存目录
+  `~/.gradle/caches/build-cache-1` 由 setup-gradle 的 GitHub Actions 缓存持久化，实现跨 job / 跨 PR 编译复用。
+- **ci-retry 正则补全（C14）**：重试判定追加 `50[234]`、`Bad Gateway`、`Gateway Timeout`、`codeload`
+  等网关层特征（冷缓存并发时 GitHub codeload 拉取也可能 5xx）。
+- **ci-retry 指数退避（C15）**：固定 15s 改为 `base * 2^(attempt-1) * jitter(0.5~1.5)`，默认重试 5 次，
+  冷缓存并发重试不再同拍集中打爆限流窗口。
+- **pre-commit ktlint 固定（C18）**：`.pre-commit-config.yaml` 用 `additional_dependencies` 钉死
+  `com.pinterest.ktlint:ktlint-cli:14.2.0`，杜绝 hook 与项目版本漂移。
+- **Dependabot grouping（C21）**：`dependabot.yml` 按领域聚合 gradle 依赖更新（quality-tooling /
+  kotlin-and-coroutines / runtime-and-test）+ actions 单组，避免 10 个独立 PR × 全矩阵 churn。
 
 ### Security (A2)
 - **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压后数据总量设硬上限
