@@ -104,20 +104,35 @@ jobs:
 
           PORTAL_BASE="${CENTRAL_PORTAL_UPLOAD_URL%%/api/v1/publisher/upload*}"
           STATUS_URL="${PORTAL_BASE}/api/v1/publisher/status"
+          # 文档（central.sonatype.org/publish/publish-portal-api/）：status 是 POST，query 传
+          # id=<deploymentId>，响应 JSON 用 deploymentState 字段；状态值 PENDING/VALIDATING/
+          # VALIDATED/PUBLISHING/PUBLISHED/FAILED。USER_MANAGED 模式下停在 VALIDATED，需手动
+          # POST deployment/<id> 触发发布（204）。upload 未指定 publishingType 时默认 AUTOMATIC，
+          # 无需手动 publish，但兜底覆盖两种模式。
           published=0
           attempts=0
+          publish_sent=0
           while [ $attempts -lt 30 ]; do
-            status_resp=$(curl -sS -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${DEPLOYMENT_ID}" || true)
-            status=$(echo "$status_resp" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\r')
-            echo "Portal status: ${status:-<empty>} (attempt $((attempts+1))/30)"
-            case "$status" in
-              SUCCESS|PUBLISHED)
+            status_resp=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${STATUS_URL}?id=${DEPLOYMENT_ID}" || true)
+            state=$(echo "$status_resp" | sed -n 's/.*"deploymentState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\r')
+            echo "Portal state: ${state:-<empty>} (attempt $((attempts+1))/30)"
+            case "$state" in
+              PUBLISHED)
                 published=1
                 break
                 ;;
-              FAILED|VALIDATION_FAILED)
+              FAILED)
                 echo "❌ Portal publish failed: $status_resp"
                 exit 1
+                ;;
+              VALIDATED)
+                if [ "$publish_sent" -eq 0 ]; then
+                  publish_resp=$(curl -sS -X POST -H "Authorization: Bearer ${CENTRAL_TOKEN}" "${PORTAL_BASE}/api/v1/publisher/deployment/${DEPLOYMENT_ID}" -o /dev/null -w '%{http_code}' || true)
+                  echo "manual publish HTTP $publish_resp (deployment $DEPLOYMENT_ID)"
+                  publish_sent=1
+                fi
+                attempts=$((attempts+1))
+                sleep 15
                 ;;
               *)
                 attempts=$((attempts+1))
