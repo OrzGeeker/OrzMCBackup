@@ -138,6 +138,7 @@ object DefaultMerger : MergeEngine {
             { p, k, m -> record(p, k, m) },
             { s, c, t, p, m -> emit(s, c, t, p, m) },
             request.runtime.parallelism,
+            request.io.syncOnFinalize,
         )
 
         val lock = outDir.resolve("session.lock")
@@ -232,6 +233,7 @@ object DefaultMerger : MergeEngine {
         record: (Path, String, String) -> Unit,
         emit: (ProgressStage, Long?, Long?, Path?, String?) -> Unit,
         parallelism: Int,
+        syncOnFinalize: Boolean,
     ) {
         val files =
             fs
@@ -245,7 +247,8 @@ object DefaultMerger : MergeEngine {
                 val rel = patch.relativize(p)
                 rel.parent?.fileName.toString() == "region" && rel.fileName.toString().endsWith(".mca")
             }
-        val miscFiles = files.filter { p -> !regionFiles.contains(p) }
+        val regionSet = regionFiles.toSet()
+        val miscFiles = files.filter { p -> !regionSet.contains(p) }
         // Region merging happens first; CopyMiscProgress reports only the misc overlay, so its
         // total is the misc count, otherwise the final percentage never reaches 100%.
         val miscTotal = miscFiles.size.toLong()
@@ -257,7 +260,7 @@ object DefaultMerger : MergeEngine {
             val outFile = out.resolve(rel)
             if (fs.isRegularFile(baseFile)) {
                 try {
-                    mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record)
+                    mergeRegion(fs, ioFactory, baseFile, p, outFile, counters, record, syncOnFinalize)
                 } catch (e: Exception) {
                     record(p, ERR_MCA, "Failed to merge region file: ${e.message}")
                 }
@@ -342,6 +345,7 @@ object DefaultMerger : MergeEngine {
         outRegion: Path,
         counters: MergeCounters,
         record: (Path, String, String) -> Unit,
+        syncOnFinalize: Boolean,
     ) {
         val name = outRegion.fileName.toString()
         val outDim = outRegion.parent.parent ?: return
@@ -397,28 +401,28 @@ object DefaultMerger : MergeEngine {
                 val be = if (crb != null) crb.get(i) else null
                 when {
                     pe != null -> {
-                        cw = cw ?: ioFactory.createWriter(fs, outRegion)
+                        cw = cw ?: ioFactory.createWriter(fs, outRegion, syncOnFinalize)
                         cw.writeEntry(pe)
                         counters.patchSlots.incrementAndGet()
                         erp?.get(i)?.let { e ->
-                            ew.writer(fs, ioFactory, outEntities).writeEntry(e)
+                            ew.writer(fs, ioFactory, outEntities, syncOnFinalize).writeEntry(e)
                             counters.linkedEntities.incrementAndGet()
                         }
                         prp?.get(i)?.let { e ->
-                            pw.writer(fs, ioFactory, outPoi).writeEntry(e)
+                            pw.writer(fs, ioFactory, outPoi, syncOnFinalize).writeEntry(e)
                             counters.linkedPoi.incrementAndGet()
                         }
                     }
                     be != null -> {
-                        cw = cw ?: ioFactory.createWriter(fs, outRegion)
+                        cw = cw ?: ioFactory.createWriter(fs, outRegion, syncOnFinalize)
                         cw.writeEntry(be)
                         counters.baseSlots.incrementAndGet()
                         erb?.get(i)?.let { e ->
-                            ew.writer(fs, ioFactory, outEntities).writeEntry(e)
+                            ew.writer(fs, ioFactory, outEntities, syncOnFinalize).writeEntry(e)
                             counters.linkedEntities.incrementAndGet()
                         }
                         prb?.get(i)?.let { e ->
-                            pw.writer(fs, ioFactory, outPoi).writeEntry(e)
+                            pw.writer(fs, ioFactory, outPoi, syncOnFinalize).writeEntry(e)
                             counters.linkedPoi.incrementAndGet()
                         }
                     }
@@ -489,9 +493,10 @@ private class WriterHolder {
         fs: FileSystem,
         ioFactory: McaIOFactory,
         path: Path,
+        syncOnFinalize: Boolean,
     ): McaWriterLike {
         writer?.let { return it }
-        val created = ioFactory.createWriter(fs, path)
+        val created = ioFactory.createWriter(fs, path, syncOnFinalize)
         writer = created
         return created
     }

@@ -49,6 +49,13 @@ class MergeCommand : Callable<Int> {
     var parallelism: Int = 1
 
     @Option(
+        names = ["--no-fsync"],
+        description = ["Skip per-region fsync after finalize (faster, less durable)"],
+        defaultValue = "false",
+    )
+    var noFsync: Boolean = false
+
+    @Option(
         names = ["--progress-interval"],
         description = ["Progress callback interval (files)"],
         defaultValue = "1000",
@@ -99,7 +106,7 @@ class MergeCommand : Callable<Int> {
                     progress = ProgressOptions(interval = progressInterval, sink = progressSink),
                     runtime = RuntimeOptions(parallelism = parallelism),
                     hooks = Hooks(),
-                    io = IOOptions(),
+                    io = IOOptions(syncOnFinalize = !noFsync),
                 )
             val r = WorldMerger.run(request)
             if (report) logger.info(MergeReportIO.toText(r))

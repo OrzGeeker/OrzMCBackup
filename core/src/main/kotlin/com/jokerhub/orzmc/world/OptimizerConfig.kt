@@ -47,6 +47,8 @@ data class Hooks(
 data class IOOptions(
     val fs: FileSystem = RealFileSystem,
     val ioFactory: McaIOFactory = DefaultMcaIOFactory(),
+    /** Skip the per-region `fd.sync()` flush after finalize. Faster but less durable. */
+    val syncOnFinalize: Boolean = true,
 )
 
 class OptimizerRequestBuilder internal constructor(
@@ -120,19 +122,10 @@ class OptimizerRequestBuilder internal constructor(
             progress = progress.copy(intervalMs = value)
         }
 
-    var progressSink: Any?
+    var progressSink: ProgressSink
         get() = progress.sink
         set(value) {
-            progress =
-                progress.copy(
-                    sink =
-                        when (value) {
-                            null -> progress.sink
-                            is ProgressSink -> value
-                            is Function1<*, *> -> CallbackProgressSink(value as (ProgressEvent) -> Unit)
-                            else -> progress.sink
-                        },
-                )
+            progress = progress.copy(sink = value)
         }
 
     fun progressSink(callback: (ProgressEvent) -> Unit) {
@@ -155,26 +148,10 @@ class OptimizerRequestBuilder internal constructor(
 
     var reportFormat: String? = null
 
-    var reportSink: Any?
+    var reportSink: ReportSink?
         get() = hooks.reportSink
         set(value) {
-            hooks =
-                hooks.copy(
-                    reportSink =
-                        when (value) {
-                            null -> null
-                            is ReportSink -> value
-                            is Path -> {
-                                val path = normalizeReportPath(value, reportFormat)
-                                FileReportSink(path, reportFormat ?: inferReportFormat(path))
-                            }
-                            is String -> {
-                                val path = normalizeReportPath(Paths.get(value), reportFormat)
-                                FileReportSink(path, reportFormat ?: inferReportFormat(path))
-                            }
-                            else -> hooks.reportSink
-                        },
-                )
+            hooks = hooks.copy(reportSink = value)
         }
 
     fun reportSink(
@@ -182,7 +159,8 @@ class OptimizerRequestBuilder internal constructor(
         format: String? = null,
     ) {
         reportFormat = format
-        reportSink = path
+        val p = normalizeReportPath(Paths.get(path), reportFormat)
+        reportSink = FileReportSink(p, reportFormat ?: inferReportFormat(p))
     }
 
     fun reportSink(
@@ -190,7 +168,8 @@ class OptimizerRequestBuilder internal constructor(
         format: String? = null,
     ) {
         reportFormat = format
-        reportSink = path
+        val p = normalizeReportPath(path, reportFormat)
+        reportSink = FileReportSink(p, reportFormat ?: inferReportFormat(p))
     }
 
     var metricsSink: MetricsSink?
@@ -332,6 +311,7 @@ class IOOptionsBuilder internal constructor(
 ) {
     var fs: FileSystem = base.fs
     var ioFactory: McaIOFactory = base.ioFactory
+    var syncOnFinalize: Boolean = base.syncOnFinalize
 
-    fun build(): IOOptions = IOOptions(fs, ioFactory)
+    fun build(): IOOptions = IOOptions(fs, ioFactory, syncOnFinalize)
 }

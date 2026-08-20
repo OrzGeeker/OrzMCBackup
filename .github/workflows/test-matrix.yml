@@ -30,12 +30,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-          cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
-      - name: Run ktlint check
-        run: bash tools/ci-retry.sh ./gradlew ktlintCheck --no-daemon
-      - name: Run detekt
-        run: bash tools/ci-retry.sh ./gradlew detekt --no-daemon
+      - name: Run ktlint and detekt
+        run: bash tools/ci-retry.sh ./gradlew ktlintCheck detekt --no-daemon
   ubuntu-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -54,18 +51,14 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-          cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on ${{ matrix.java }}
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       # P1-C4: coverage 并入矩阵的 Java 17 job，复用同一步已跑的 test 结果，
       # 不再单开 coverage job 二次运行整套套件。
-      - name: Run coverage (Java 17 only)
+      - name: Generate and verify coverage (Java 17 only)
         if: matrix.java == '17'
-        run: bash tools/ci-retry.sh ./gradlew :core:koverXmlReport :app:koverXmlReport --no-daemon
-      - name: Verify coverage threshold (Java 17 only)
-        if: matrix.java == '17'
-        run: bash tools/ci-retry.sh ./gradlew :core:koverVerify :app:koverVerify --no-daemon
+        run: bash tools/ci-retry.sh ./gradlew :core:koverXmlReport :core:koverVerify :app:koverXmlReport :app:koverVerify --no-daemon
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v7
@@ -107,7 +100,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-          cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on Windows Java ${{ matrix.java }}
         shell: bash
@@ -135,7 +127,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-          cache: gradle
       - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run tests on macOS Java ${{ matrix.java }}
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon

@@ -48,35 +48,59 @@ object NbtForceLoader {
         maxCompoundDepth: Int = DEFAULT_MAX_COMPOUND_DEPTH,
     ): List<Pair<Int, Int>> {
         GZIPInputStream(BufferedInputStream(file.inputStream())).use { gz ->
-            val inp = DataInputStream(gz)
-            val rootType = inp.readByte()
-            require(rootType == TAG_COMPOUND) { "root must be Compound" }
-            readUtf(inp)
-            val compound = readCompound(inp, 0, maxCompoundDepth, maxArraySize, maxListLength)
-            val dataTag = compound["data"] as? Map<*, *> ?: return emptyList()
-            val out = mutableListOf<Pair<Int, Int>>()
-            val forced = dataTag["Forced"] as? LongArray
-            if (forced != null) {
-                var i = 0
-                while (i + 1 < forced.size) {
-                    out.add(Pair(forced[i].toInt(), forced[i + 1].toInt()))
-                    i += 2
-                }
-            }
-            val tickets = dataTag["tickets"] as? List<*>
-            if (tickets != null) {
-                @Suppress("LoopWithTooManyJumpStatements")
-                for (t in tickets) {
-                    val tm = t as? Map<*, *> ?: continue
-                    val typeStr = tm["type"] as? String ?: continue
-                    if (typeStr == "minecraft:forced") {
-                        val pos = tm["chunk_pos"] as? IntArray ?: continue
-                        if (pos.size == 2) out.add(Pair(pos[0], pos[1]))
-                    }
-                }
-            }
-            return out
+            return parseFrom(gz, maxArraySize, maxListLength, maxCompoundDepth)
         }
+    }
+
+    /**
+     * Parse an in-memory GZip-compressed NBT payload, e.g. read through a [FileSystem].
+     * Bounds are identical to [parse].
+     */
+    fun parse(
+        bytes: ByteArray,
+        maxArraySize: Int = DEFAULT_MAX_ARRAY_SIZE,
+        maxListLength: Int = DEFAULT_MAX_LIST_LENGTH,
+        maxCompoundDepth: Int = DEFAULT_MAX_COMPOUND_DEPTH,
+    ): List<Pair<Int, Int>> {
+        GZIPInputStream(BufferedInputStream(bytes.inputStream())).use { gz ->
+            return parseFrom(gz, maxArraySize, maxListLength, maxCompoundDepth)
+        }
+    }
+
+    private fun parseFrom(
+        gz: GZIPInputStream,
+        maxArraySize: Int,
+        maxListLength: Int,
+        maxCompoundDepth: Int,
+    ): List<Pair<Int, Int>> {
+        val inp = DataInputStream(gz)
+        val rootType = inp.readByte()
+        require(rootType == TAG_COMPOUND) { "root must be Compound" }
+        readUtf(inp)
+        val compound = readCompound(inp, 0, maxCompoundDepth, maxArraySize, maxListLength)
+        val dataTag = compound["data"] as? Map<*, *> ?: return emptyList()
+        val out = mutableListOf<Pair<Int, Int>>()
+        val forced = dataTag["Forced"] as? LongArray
+        if (forced != null) {
+            var i = 0
+            while (i + 1 < forced.size) {
+                out.add(Pair(forced[i].toInt(), forced[i + 1].toInt()))
+                i += 2
+            }
+        }
+        val tickets = dataTag["tickets"] as? List<*>
+        if (tickets != null) {
+            @Suppress("LoopWithTooManyJumpStatements")
+            for (t in tickets) {
+                val tm = t as? Map<*, *> ?: continue
+                val typeStr = tm["type"] as? String ?: continue
+                if (typeStr == "minecraft:forced") {
+                    val pos = tm["chunk_pos"] as? IntArray ?: continue
+                    if (pos.size == 2) out.add(Pair(pos[0], pos[1]))
+                }
+            }
+        }
+        return out
     }
 
     private fun readUtf(inp: DataInputStream): String {

@@ -1,0 +1,14 @@
+# 统一换行符约定（C22）：
+# shell 脚本必须 LF —— Windows 检出若转成 CRLF 会破坏 shebang 与 bash 解析。
+*.sh text eol=lf
+# 其余文本文件采用 Git 自动换行（仓库内存储 LF，检出按平台转换）。
+*.kt text
+*.kts text
+*.java text
+*.md text
+*.yml text
+*.yaml text
+*.toml text
+*.json text
+*.properties text
+*.gradle text

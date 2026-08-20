@@ -14,12 +14,16 @@ import java.nio.ByteOrder
  */
 class McaWriter(
     path: String,
+    private val syncOnFinalize: Boolean = true,
 ) {
     private val file = RandomAccessFile(File(path), "rw")
     private var dataOffset = 8192L
     private val offsets = IntArray(1024)
     private val sizes = IntArray(1024)
     private val timestamps = IntArray(1024)
+
+    /** Pre-zeroed buffer reused for sector padding (avoids a fresh allocation per entry). */
+    private val zeros = ByteArray(4096)
 
     init {
         file.setLength(0)
@@ -39,9 +43,15 @@ class McaWriter(
         file.write(serialized)
         val written = serialized.size.toLong()
         val pad = (4096 - (written % 4096)) % 4096
-        if (pad > 0) file.write(ByteArray(pad.toInt()))
+        if (pad > 0) file.write(zeros, 0, pad.toInt())
         dataOffset += written + pad
         val idx = entry.regionIndex()
+        if (start > Int.MAX_VALUE) {
+            throw IllegalStateException(
+                "Region file exceeds 2 GiB at chunk slot $idx (offset $start): " +
+                    "the Anvil location table stores 3-byte offsets and cannot address beyond 2 GiB",
+            )
+        }
         offsets[idx] = start.toInt()
         sizes[idx] = (written + pad).toInt()
         timestamps[idx] = entry.modifiedTime()
@@ -64,7 +74,7 @@ class McaWriter(
         file.seek(0)
         file.write(loc)
         file.write(time)
-        file.fd.sync()
+        if (syncOnFinalize) file.fd.sync()
     }
 
     fun close() {

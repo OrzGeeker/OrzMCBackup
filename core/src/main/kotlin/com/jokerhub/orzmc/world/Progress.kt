@@ -1,5 +1,8 @@
 package com.jokerhub.orzmc.world
 
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicLong
+
 /** Phases of the optimization pipeline, emitted as [ProgressEvent] values. */
 enum class ProgressStage {
     /** Initialization */
@@ -54,3 +57,29 @@ data class ProgressEvent(
     val path: String? = null,
     val message: String? = null,
 )
+
+/**
+ * Aggregates the progress-reporting lifecycle of a single optimization run: the
+ * configured sink and emit cadence, the total work estimate, and the thread-safe
+ * count of processed items. Thread-safe for use from parallel region worker
+ * threads (A3).
+ */
+internal class ProgressTracker(
+    val total: Long,
+    val interval: Long,
+    val intervalMs: Long,
+    private val sink: ProgressSink,
+) {
+    val processed = AtomicLong(0L)
+
+    /** Forward one progress event to the configured sink. */
+    fun emit(
+        stage: ProgressStage,
+        current: Long? = null,
+        total: Long? = null,
+        path: Path? = null,
+        message: String? = null,
+    ) {
+        sink.emit(ProgressEvent(stage, current, total, path?.toString(), message))
+    }
+}

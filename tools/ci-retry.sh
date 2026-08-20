@@ -22,23 +22,29 @@ retriable() {
 attempt=1
 while :; do
   echo "::group::Attempt ${attempt}/${max_attempts}: $*"
-  output=$("$@" 2>&1)
-  rc=$?
+  # C16: 流式打印 —— tee 到临时文件而不是缓存全量输出到变量，
+  # 这样长任务（test/coverage）的日志边跑边出，同时保留完整日志供重试判定。
+  log="$(mktemp)"
+  "$@" 2>&1 | tee "$log"
+  rc=${PIPESTATUS[0]}
   echo "::endgroup::"
 
   if [ "${rc}" -eq 0 ]; then
+    rm -f "$log"
     echo "Command succeeded on attempt ${attempt}."
     exit 0
   fi
 
-  if [ "${attempt}" -ge "${max_attempts}" ] || ! retriable "${output}"; then
+  if [ "${attempt}" -ge "${max_attempts}" ] || ! retriable "$(cat "$log")"; then
     echo "Command failed on attempt ${attempt} (exit ${rc}) — not a retriable network error." >&2
-    echo "${output}" >&2
+    cat "$log" >&2
+    rm -f "$log"
     exit "${rc}"
   fi
 
   echo "Transient dependency-download failure on attempt ${attempt}; retrying in ${backoff}s..."
-  echo "$(printf '%s\n' "${output}" | tail -n 25)"
+  tail -n 25 "$log"
+  rm -f "$log"
   sleep "${backoff}"
   attempt=$((attempt + 1))
 done

@@ -694,7 +694,8 @@ private class UnwrappingIOFactory : McaIOFactory {
     override fun createWriter(
         fs: FileSystem,
         path: Path,
-    ): McaWriterLike = inner.createWriter(unwrap(fs), path)
+        syncOnFinalize: Boolean,
+    ): McaWriterLike = inner.createWriter(unwrap(fs), path, syncOnFinalize)
 }
 
 /** [McaIOFactory] whose writers throw on [McaWriterLike.finalizeFile], for write-error paths. */
@@ -709,8 +710,9 @@ private class FailingFinalizeIOFactory : McaIOFactory {
     override fun createWriter(
         fs: FileSystem,
         path: Path,
+        syncOnFinalize: Boolean,
     ): McaWriterLike {
-        val delegate = inner.createWriter(fs, path)
+        val delegate = inner.createWriter(fs, path, syncOnFinalize)
         return object : McaWriterLike {
             override fun writeEntry(entry: McaEntry) = delegate.writeEntry(entry)
 
@@ -738,5 +740,6 @@ private class ThrowingReaderIOFactory(
     override fun createWriter(
         fs: FileSystem,
         path: Path,
-    ): McaWriterLike = inner.createWriter(fs, path)
+        syncOnFinalize: Boolean,
+    ): McaWriterLike = inner.createWriter(fs, path, syncOnFinalize)
 }

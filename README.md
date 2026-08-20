@@ -143,6 +143,7 @@ java -jar backup.jar WORLD_DIR [OUTPUT_DIR] [options]
 | `--parallelism` | `1` | 并行线程数（同时驱动维度级与区域级并行） |
 | `--copy-misc` | `true` | 复制非 MCA 杂项文件（`level.dat`、`players/`、`data/` 等；`--no-copy-misc` 关闭） |
 | `--dry-run` | `false` | 预览模式，只扫描统计不写入 |
+| `--no-fsync` | `false` | 跳过 region 写入完成后的 `fsync()` 刷盘（更快，但异常掉电时持久性稍弱） |
 
 ### `merge` 命令
 
@@ -161,6 +162,7 @@ java -jar backup.jar merge BASE PATCH OUTPUT [options]
 | `--progress-interval` | `1000` | 进度回调的文件粒度 |
 | `--report` | `false` | 标准输出打印合并统计 |
 | `--report-file` / `--report-format` | `null` / `json` | 报告写文件（`json` / `csv`） |
+| `--no-fsync` | `false` | 跳过 region 写入完成后的 `fsync()` 刷盘（更快，但异常掉电时持久性稍弱） |
 
 ### 退出码
 

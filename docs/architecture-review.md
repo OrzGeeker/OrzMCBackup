@@ -363,4 +363,35 @@ P0 条目已在审查当轮实施；P1 条目已按路线图顺序实施（并�
 | T9 并行确定性 | ✅ 已实施 | `WorldMergerTest` 8 region × parallelism 4 多轮输出逐字节一致且等于串行 |
 | 质量门禁 koverVerify → check | ✅ 已实施 | core/app `tasks.check { dependsOn("koverVerify") }`，阈值不达标即 fail |
 
-P2 条目列入下个版本路线图（工程优化 A9/A18、权限最小化 C19、版本统一 C20、Dependabot grouping C21 等）。
+P2 条目已按路线图实施（性能 → 健壮性 → 架构 → 测试 → CI/工程）：
+
+| 条目 | 状态 | 变更 |
+|---|---|---|
+| A9 BufferedRafAccess 绝对位置 | ✅ 已实施 | `pos` 绝对位置 + 大块读旁路，消除「整块读+尾部再读」的双次 seek 模式 |
+| A10 syncOnFinalize 可选 | ✅ 已实施 | `IOOptions.syncOnFinalize` + `--no-fsync` CLI 选项；未开时跳过 `fd.sync()` |
+| A11 零分配 chunk 计数 | ✅ 已实施 | `McaReader.count()` / `McaIOFactory.count()`，不分配 `McaEntry` |
+| A12 misc 文件集合过滤 | ✅ 已实施 | `regionFiles.toSet()` + `!regionSet.contains(p)`，消除 O(n²) |
+| A13 padding 零缓冲 | ✅ 已实施 | 复用预清零 `ByteArray(4096)` 写 sector padding |
+| A14 维度发现短路 | ✅ 已实施 | 既有代码已满足（`isDirectory` + `isDimensionDir` 短路），无改动 |
+| A15 region 2 GiB 溢出守卫 | ✅ 已实施 | offset 表 3 字节无法寻址 >2GiB，超限抛 `IllegalStateException` |
+| A16 ForceLoad FileSystem 感知 | ✅ 已实施 | `ForceLoad.parse(fs, dim, strict)` + `NbtForceLoader.parse(bytes)` 字节重载 |
+| A17 copy 不跟随符号链接 | ✅ 已实施 | `RealFileSystem.copy` 加 `NOFOLLOW_LINKS` |
+| A18 MemoryFS 路径组件匹配 | ✅ 已实施 | `list`/`walk` 改 `key.parent`/`Path.startsWith`，修复 Windows `\` 分隔前缀串匹配 bug |
+| A19 Cleaner 统一删除 | ✅ 已实施 | `deleteTreeWithRetry` 委托 `Cleaner`；`clearDosAttributes` 补 `setSystem(false)` |
+| A20 中文错误消息改英文 | ✅ 已实施 | `Optimizer` CopyMisc 错误消息英文化 |
+| A7 sink 强类型化 | ✅ 已实施 | `progressSink`/`reportSink` 由 `Any?` 运行时分发改强类型属性；Path/String 便捷走函数 |
+| A8 DimensionContext 生命周期拆分 | ✅ 已实施 | progress 生命周期抽为 `ProgressTracker`，DimensionContext 17→12 字段 |
+| T10 Cleaner 直接单测 | ✅ 已实施 | `CleanerTest`：DOS 属性清理（Windows 门控）+ 只读树删除 + 缺根语义 |
+| T11 RangePattern 处置 | ✅ 已实施 | 判定为生产死代码，删除 `RangePattern` 及 4 个测试（可 git 恢复） |
+| T12 夹具缺失改失败 | ✅ 已实施 | `McaReaderTest`/`InhabitedThresholdTest` 由 `assumeTrue` 改 `assertTrue`，不再静默跳过 |
+| T13 NBT 深度边界 | ✅ 已实施 | `NbtForceLoaderTest` 增深度超限拒绝 + 边界内正常解析两测 |
+| C6 cache 去重 | ✅ 已实施 | 移除 setup-java `cache: gradle`，缓存统一由 setup-gradle 承担 |
+| C7 命令合并 | ✅ 已实施 | lint 两步并为 `ktlintCheck detekt`；coverage 生成+验证并为一条命令 |
+| C8 detekt 版本 | ⏸️ 保持 alpha.6 | 2.0 正式版未发布（最新 alpha.3 < 当前 alpha.6）；detekt.yml 为 2.0 专属配置，降 1.23.8 报 11 个无效属性。version catalog 已钉死，正式版发布后升级 |
+| C12 sha256 自证去除 | ✅ 已实施 | release-lib 移除本地 sha256 生成与反验，保留产物 + `.asc` 存在性检查 |
+| C16 ci-retry 流式 | ✅ 已实施 | 输出 `tee` 到临时文件流式打印，不再缓存全量到变量 |
+| C19 permissions 最小化 | ✅ 已实施 | test-matrix 已有 `contents: read`；release-lib 补同；release-app 保留 `contents: write` |
+| C20 setup-gradle 版本统一 | ✅ 已实施 | 三工作流统一 `@v6.2.0` |
+| C22 .gitattributes | ✅ 已实施 | `*.sh text eol=lf` + 文本类扩展名显式声明 |
+
+剩余待办（不在本轮 P2 范围）：C21 Dependabot grouping、C13 Portal 发布后回下载验证、C5 构建缓存远程化、P3 其余条目。

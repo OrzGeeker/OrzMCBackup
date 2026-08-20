@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+### Performance (A9/A11/A12/A13/A15)
+- **BufferedRafAccess 绝对位置（A9）**：`pos` 改为绝对文件位置，大块读直接旁路缓冲区
+  （`delegate.seek+readFully`），消除「整块读 + 尾部再读」的双次 seek 模式。新增 `RandomAccessTest`
+  6 项（大读旁路 / 连续大读 / 大读后小读 / 旁路后重定位 / 越界 EOF / 混合计划）。
+- **零分配 chunk 计数（A11）**：`McaReader.count()` / `McaIOFactory.count()` 直接扫 offset/size 表，
+  不再为计数分配 `McaEntry` 对象；`McaUtils.countTotalChunks` 改用之。
+- **misc 文件集合过滤（A12）**：`WorldMerger` misc 收集用 `Set` 判定 region 成员，消除 O(n²) contains。
+- **padding 零缓冲（A13）**：`McaWriter` 复用预清零 `ByteArray(4096)` 写 sector padding，不再每次分配。
+- **region 2 GiB 溢出守卫（A15）**：Anvil 偏移表为 3 字节，无法寻址 >2GiB；超限抛
+  `IllegalStateException`，避免 offset 溢出写坏 header。
+- **MemoryFS 路径组件匹配（A18）**：`list`/`walk` 由字符串前缀匹配改为 `Path` 组件级匹配，修复
+  Windows `\` 分隔下「/mem/world` 误含 `/mem/world2`」的真实 bug。新增 `MemoryFSTest` 3 项。
+
+### Robustness (A16/A17/A19/A20)
+- **ForceLoad FileSystem 感知（A16）**：`ForceLoad.parse(fs, dim, strict)` 直接经 `FileSystem` 读取
+  force-load 文件（`Optimizer` 的 MemoryFS 路径不再落盘）；`NbtForceLoader` 新增 `parse(bytes)` 字节重载。
+- **copy 不跟随符号链接（A17）**：`RealFileSystem.copy` 加 `NOFOLLOW_LINKS`，链接按链接复制而非目标。
+- **Cleaner 统一删除（A19）**：`RealFileSystem.deleteTreeWithRetry` 委托 `Cleaner`；`clearDosAttributes`
+  补 `setSystem(false)`（清理 Windows system 属性）。
+- **错误消息英文化（A20）**：`Optimizer` CopyMisc 阶段的中文错误消息改为英文，报告/日志统一英文。
+
+### Architecture (A7/A8/A10)
+- **可选 fsync（A10）**：`IOOptions.syncOnFinalize`（默认 true）+ CLI `--no-fsync` 选项；关闭时跳过
+  region 写完成的 `fd.sync()`，换取更快但稍弱的持久性保证。
+- **sink 强类型化（A7）**：`OptimizerRequestBuilder.progressSink`/`reportSink` 由 `Any?` 运行时类型分发
+  改为强类型属性（`ProgressSink`/`ReportSink?`）；Path/String 便捷转换保留为同名函数重载。
+- **DimensionContext 生命周期拆分（A8）**：progress 生命周期抽为 `ProgressTracker`（total/interval/
+  emit/processed 计数器聚合），`DimensionContext` 字段 17→12，进度状态内聚可测。
+
+### Testing (T10-T13)
+- **Cleaner 直接单测（T10）**：`CleanerTest` 4 项——普通文件 no-op / Windows 只读属性清理（环境门控）
+  / 只读文件树删除 / 缺根路径返回 false。
+- **RangePattern 处置（T11）**：确认生产死代码（仅测试引用），删除 `RangePattern` 及 4 个测试。
+- **夹具缺失不再静默跳过（T12）**：`McaReaderTest`/`InhabitedThresholdTest` 由 `assumeTrue` 改 `assertTrue`，
+  夹具缺失即失败，与其它夹具测试行为一致。
+- **NBT 深度边界（T13）**：`NbtForceLoaderTest` 增深度超限拒绝（`maxCompoundDepth` 生效）+ 边界内正常解析。
+
+### CI (C6/C7/C8/C12/C16/C19/C20/C22)
+- **缓存去重（C6）**：移除 setup-java `cache: gradle`，Gradle 依赖缓存统一由 setup-gradle 承担。
+- **命令合并（C7）**：lint 两步并为 `ktlintCheck detekt`；coverage 生成 + 验证并为一条命令，省一次 JVM 启停。
+- **detekt 版本（C8）**：2.0 正式版未发布（最新 alpha.3 < 当前 alpha.6），保持 `2.0.0-alpha.6`；
+  detekt.yml 为 2.0 专属配置，version catalog 钉死版本，正式版发布后升级。
+- **sha256 自证去除（C12）**：release-lib 移除「生成后立即本地反验」的同义反复步骤，保留产物与
+  `.asc` 签名存在性检查；真实校验应在 Portal 返回后回下载。
+- **ci-retry 流式（C16）**：输出 `tee` 到临时文件流式打印，长任务日志边跑边出，不再全量缓存到变量。
+- **权限最小化（C19）**：release-lib 补 `permissions: contents: read`（test-matrix 已有）。
+- **版本统一（C20）**：三工作流 setup-gradle 统一 `@v6.2.0`。
+- **.gitattributes（C22）**：新增 `*.sh text eol=lf` 等换行约束，避免 Windows 检出 CRLF 破坏脚本。
+
 ### Security (A2)
 - **解压炸弹防护**：`McaEntry.allDataUncompressed` 对解压后数据总量设硬上限
   `MAX_UNCOMPRESSED_CHUNK_LENGTH`（64MB，远高于任何合法 chunk payload < 1MB）。此前压缩长度上限

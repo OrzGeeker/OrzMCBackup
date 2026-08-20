@@ -12,24 +12,24 @@ enum class ProgressMode { Off, Global, Region }
 /**
  * Shared context for dimension processing methods.
  * Collapses the 15+ parameter explosion in helper methods.
+ *
+ * Lifecycle separation (A8): the progress/report concern lives in [progress]
+ * ([ProgressTracker]); the remaining fields are the dimension-processing
+ * lifecycle (filesystem, filters, IO, error recording).
  */
 internal data class DimensionContext(
     val fs: FileSystem,
     val input: Path,
     val out: Path,
     val ticks: Long,
-    val progressTotal: Long,
-    val processedChunksAtomic: java.util.concurrent.atomic.AtomicLong,
-    val record: (Path, String, String) -> Unit,
-    val emit: (ProgressStage, Long?, Long?, Path?, String?) -> Unit,
     val removeUnknown: Boolean,
     val strict: Boolean,
-    val progressInterval: Long,
-    val progressIntervalMs: Long,
-    val progressSink: ProgressSink,
     val ioFactory: McaIOFactory,
     val parallelism: Int,
     val dryRun: Boolean = false,
+    val syncOnFinalize: Boolean = true,
+    val record: (Path, String, String) -> Unit,
+    val progress: ProgressTracker,
 )
 
 /**
@@ -178,9 +178,13 @@ object DefaultOptimizer : OptimizerEngine {
         val progressTotal = totalChunks + miscTotal + zipSteps
         emit(ProgressStage.Discover, 0, totalChunks, input, "counting chunks")
 
-        val processedChunksAtomic =
-            java.util.concurrent.atomic
-                .AtomicLong(0L)
+        val progressTracker =
+            ProgressTracker(
+                total = progressTotal,
+                interval = request.progress.interval,
+                intervalMs = request.progress.intervalMs,
+                sink = progressSink,
+            )
 
         val ctx =
             DimensionContext(
@@ -188,18 +192,14 @@ object DefaultOptimizer : OptimizerEngine {
                 input = input,
                 out = out,
                 ticks = ticks,
-                progressTotal = progressTotal,
-                processedChunksAtomic = processedChunksAtomic,
-                record = { p, k, m -> record(p, k, m) },
-                emit = { s, c, t, p, m -> emit(s, c, t, p, m) },
                 removeUnknown = request.filter.removeUnknown,
                 strict = request.filter.strict,
-                progressInterval = request.progress.interval,
-                progressIntervalMs = request.progress.intervalMs,
-                progressSink = progressSink,
                 ioFactory = request.io.ioFactory,
                 parallelism = request.runtime.parallelism,
                 dryRun = request.outputOptions.dryRun,
+                syncOnFinalize = request.io.syncOnFinalize,
+                record = { p, k, m -> record(p, k, m) },
+                progress = progressTracker,
             )
 
         val removedTotal = processDimensions(ctx, tasks)
@@ -217,9 +217,9 @@ object DefaultOptimizer : OptimizerEngine {
             }
         }
 
-        val doneCur = processedChunksAtomic.get() + miscTotal + zipSteps
+        val doneCur = progressTracker.processed.get() + miscTotal + zipSteps
         emit(ProgressStage.Done, doneCur, progressTotal, input, null)
-        val report = OptimizeReport(processedChunksAtomic.get(), removedTotal, errors)
+        val report = OptimizeReport(progressTracker.processed.get(), removedTotal, errors)
         request.hooks.reportSink?.write(report)
         metrics.incProcessed(report.processedChunks)
         metrics.incRemoved(report.removedChunks)
@@ -323,7 +323,7 @@ object DefaultOptimizer : OptimizerEngine {
         val targetDim = ctx.out.resolve(rel)
         val forced =
             try {
-                ForceLoad.parse(dim, ctx.strict)
+                ForceLoad.parse(ctx.fs, dim, ctx.strict)
             } catch (e: ForceLoadedParseException) {
                 if (ctx.strict) ctx.record(dim, "ForceLoaded", e.message ?: "Failed to parse force-loaded chunk list")
                 emptyList()
@@ -333,7 +333,7 @@ object DefaultOptimizer : OptimizerEngine {
                 ListPattern(forced),
                 InhabitedTimePattern(ctx.ticks, ctx.removeUnknown),
             )
-        val startProcessed = ctx.processedChunksAtomic.get()
+        val startProcessed = ctx.progress.processed.get()
         val result =
             DimensionProcessor.process(
                 ctx.fs,
@@ -342,14 +342,11 @@ object DefaultOptimizer : OptimizerEngine {
                 targetDim,
                 patterns,
                 ctx.record,
-                ctx.progressSink,
-                ctx.progressTotal,
-                ctx.progressInterval,
-                ctx.progressIntervalMs,
-                ctx.processedChunksAtomic,
+                ctx.progress,
                 ctx.strict,
                 ctx.parallelism,
                 dryRun = ctx.dryRun,
+                syncOnFinalize = ctx.syncOnFinalize,
             )
         // DimensionProcessor returns the global cumulative counter snapshot; convert to
         // this dimension's own delta so DimensionResult.processed stays per-dimension
@@ -413,10 +410,10 @@ object DefaultOptimizer : OptimizerEngine {
         request: OptimizerRequest,
         excludePaths: Set<Path> = emptySet(),
     ) {
-        val base = ctx.processedChunksAtomic.get()
-        ctx.emit(ProgressStage.CopyMisc, base, ctx.progressTotal, ctx.out, "copying misc files")
-        val progressIntervalMs = ctx.progressIntervalMs
-        val progressInterval = ctx.progressInterval
+        val base = ctx.progress.processed.get()
+        ctx.progress.emit(ProgressStage.CopyMisc, base, ctx.progress.total, ctx.out, "copying misc files")
+        val progressIntervalMs = ctx.progress.intervalMs
+        val progressInterval = ctx.progress.interval
         var done = 0L
         val useTime = progressIntervalMs > 0
         var lastEmit = System.currentTimeMillis()
@@ -425,11 +422,11 @@ object DefaultOptimizer : OptimizerEngine {
             if (useTime) {
                 val now = System.currentTimeMillis()
                 if (now - lastEmit >= progressIntervalMs) {
-                    ctx.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progressTotal, p, null)
+                    ctx.progress.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progress.total, p, null)
                     lastEmit = now
                 }
             } else if (progressInterval > 0 && done % progressInterval == 0L) {
-                ctx.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progressTotal, p, null)
+                ctx.progress.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progress.total, p, null)
             }
         }
         val reserved = setOf("region", "entities", "poi")
@@ -449,33 +446,33 @@ object DefaultOptimizer : OptimizerEngine {
                     try {
                         ctx.fs.createDirectories(target.parent ?: outDir)
                     } catch (e: Exception) {
-                        ctx.record(p, "CopyMisc", "创建目录失败: ${e.message}")
+                        ctx.record(p, "CopyMisc", "Failed to create directory: ${e.message}")
                     }
                     try {
                         ctx.fs.copy(p, target, true)
                     } catch (e: Exception) {
-                        ctx.record(p, "CopyMisc", "复制文件失败: ${e.message}")
+                        ctx.record(p, "CopyMisc", "Failed to copy file: ${e.message}")
                     }
                     done += 1
                     maybeEmit(target)
                 }
             }
         }
-        ctx.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progressTotal, ctx.out, null)
+        ctx.progress.emit(ProgressStage.CopyMiscProgress, base + done, ctx.progress.total, ctx.out, null)
     }
 
     private fun handleZipOutput(
         ctx: DimensionContext,
         miscTotal: Long,
     ) {
-        val base = ctx.processedChunksAtomic.get()
+        val base = ctx.progress.processed.get()
         val afterMisc = base + miscTotal
         var compressed = false
         try {
-            ctx.emit(ProgressStage.Compress, afterMisc, ctx.progressTotal, ctx.out, null)
+            ctx.progress.emit(ProgressStage.Compress, afterMisc, ctx.progress.total, ctx.out, null)
             Compressor.compressToTimestampZip(ctx.out)
             compressed = true
-            ctx.emit(ProgressStage.Compress, afterMisc + 1, ctx.progressTotal, ctx.out, null)
+            ctx.progress.emit(ProgressStage.Compress, afterMisc + 1, ctx.progress.total, ctx.out, null)
         } catch (e: IOException) {
             val msg = "Failed to compress output directory: ${ctx.out}"
             ctx.record(ctx.out, "Compress", msg)
@@ -485,10 +482,10 @@ object DefaultOptimizer : OptimizerEngine {
         // destroy the only copy of the optimized world — there is no zip to fall back on.
         if (compressed) {
             try {
-                ctx.emit(ProgressStage.Cleanup, afterMisc + 1, ctx.progressTotal, ctx.out, null)
+                ctx.progress.emit(ProgressStage.Cleanup, afterMisc + 1, ctx.progress.total, ctx.out, null)
                 val ok = ctx.fs.deleteTreeWithRetry(ctx.out, 5, 500)
                 if (!ok) throw IOException("cleanup failed")
-                ctx.emit(ProgressStage.Cleanup, afterMisc + 2, ctx.progressTotal, ctx.out, null)
+                ctx.progress.emit(ProgressStage.Cleanup, afterMisc + 2, ctx.progress.total, ctx.out, null)
             } catch (e: IOException) {
                 val msg = "Failed to delete output directory: ${ctx.out}"
                 ctx.record(ctx.out, "Cleanup", msg)

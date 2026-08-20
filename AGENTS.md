@@ -70,7 +70,7 @@ Kotlin/Gradle 多模块工程，用于**优化 Minecraft Java 世界**：扫描�
     `RandomAccess`（`RafAccess`/`BufferedRafAccess`/`MemoryAccess`）
 - **`core/src/main/kotlin/com/jokerhub/orzmc/patterns/`** — 区块保留策略
   - `InhabitedTimePattern`（字节级扫描 `InhabitedTime` long，`>` 语义，`threshold=0` 移除未曾访问区块）、
-    `ListPattern`（坐标保留列表，用于强制加载）、`RangePattern`（矩形区域；**库 API，尚未接入优化器管道与 CLI**）
+    `ListPattern`（坐标保留列表，用于强制加载；`RangePattern` 已在 P2-T11 删除，属生产死代码）
 - **`app/src/main/kotlin/com/jokerhub/orzmc/cli/`** — `Main.kt`（backup 命令 + 子命令分发）、`MergeCommand.kt`
 
 ## 关键设计决策

@@ -120,6 +120,16 @@ class McaReader(
         return McaEntry(file, off.toLong(), size, index, ts, xPos, zPos)
     }
 
+    /** Count used chunk slots without allocating [McaEntry] objects. */
+    fun count(): Int {
+        ensure()
+        var n = 0
+        for (i in 0 until 1024) {
+            if (offsets!![i] != 0 && sizes!![i] != 0) n++
+        }
+        return n
+    }
+
     override fun close() {
         try {
             file.close()

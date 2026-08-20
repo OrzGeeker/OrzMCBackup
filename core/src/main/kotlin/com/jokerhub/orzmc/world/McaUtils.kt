@@ -27,7 +27,7 @@ object McaUtils {
             fs.list(regionDir).filter { it.toString().endsWith(".mca") && isValidMca(fs, it) }.forEach { p ->
                 try {
                     ioFactory.openReader(fs, p).use { r ->
-                        total += r.entries().size
+                        total += r.count()
                     }
                 } catch (e: Exception) {
                     onError?.invoke(p, "MCA", "Failed to count chunks: ${e.message}")

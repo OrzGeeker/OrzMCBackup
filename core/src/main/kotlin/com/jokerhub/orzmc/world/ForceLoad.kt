@@ -20,20 +20,22 @@ object ForceLoad {
             "data/chunks.dat",
         )
 
-    /** Parse force-loaded chunk data in [dimension], returning global (x, z) coordinate pairs. */
+    /** Parse force-loaded chunk data in [dimension] via [fs], returning global (x, z) pairs. */
     fun parse(
+        fs: FileSystem,
         dimension: Path,
         strict: Boolean,
     ): List<Pair<Int, Int>> {
         for (relPath in FILE_PATHS) {
-            val f = dimension.resolve(relPath).toFile()
-            if (f.isFile) {
+            val p = dimension.resolve(relPath)
+            if (fs.isRegularFile(p)) {
                 return try {
-                    NbtForceLoader.parse(f)
+                    val bytes = fs.read(p) ?: throw IllegalStateException("force-load file unreadable: $p")
+                    NbtForceLoader.parse(bytes)
                 } catch (e: Exception) {
                     if (strict) {
                         throw ForceLoadedParseException(
-                            "Failed to parse force-loaded chunk list: $f",
+                            "Failed to parse force-loaded chunk list: $p",
                             e,
                         )
                     } else {
@@ -44,4 +46,10 @@ object ForceLoad {
         }
         return emptyList()
     }
+
+    /** Backward-compatible overload reading from the real filesystem. */
+    fun parse(
+        dimension: Path,
+        strict: Boolean,
+    ): List<Pair<Int, Int>> = parse(RealFileSystem, dimension, strict)
 }

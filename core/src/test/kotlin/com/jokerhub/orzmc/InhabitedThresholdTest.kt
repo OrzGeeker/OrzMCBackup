@@ -3,7 +3,6 @@ package com.jokerhub.orzmc
 import com.jokerhub.orzmc.mca.McaReader
 import com.jokerhub.orzmc.patterns.InhabitedTimePattern
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths
 
@@ -11,7 +10,7 @@ class InhabitedThresholdTest {
     @Test
     fun `lower threshold should keep at least as many chunks as higher threshold`() {
         val url = this::class.java.classLoader.getResource("Fixtures/world/region/r.0.0.mca")
-        assumeTrue(url != null, "fixtures missing: src/test/resources/Fixtures")
+        assertTrue(url != null, "fixtures missing: src/test/resources/Fixtures")
         McaReader.open(Paths.get(url!!.toURI()).toString()).use { r ->
             val entries = r.entries()
 

@@ -123,6 +123,66 @@ class McaWriterTest {
     }
 
     @Test
+    fun `writer with syncOnFinalize disabled still produces a valid mca`(
+        @TempDir tempDir: Path,
+    ) {
+        val srcFile = tempDir.resolve("r.0.0.mca")
+        val outFile = tempDir.resolve("out-nosync.mca")
+        val raw = McaMemoryBuilder.buildSingleEntryMca(3, 1234, CompressionKind.ZLIB)
+        java.nio.file.Files
+            .write(srcFile, raw)
+
+        val reader = McaReader.open(srcFile.toString())
+        try {
+            val entry = reader.get(3) ?: throw AssertionError("entry 3 not found")
+            val writer = McaWriter(outFile.toString(), syncOnFinalize = false)
+            try {
+                writer.writeEntry(entry)
+                writer.finalizeFile()
+            } finally {
+                writer.close()
+            }
+        } finally {
+            reader.close()
+        }
+
+        val readBackFile = tempDir.resolve("r.3.0.mca")
+        java.nio.file.Files
+            .copy(outFile, readBackFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        val readBackReader = McaReader.open(readBackFile.toString())
+        try {
+            assertEquals(1, readBackReader.count())
+            val readBack = readBackReader.get(3) ?: throw AssertionError("entry 3 not found")
+            assertEquals(3, readBack.regionIndex())
+        } finally {
+            readBackReader.close()
+        }
+    }
+
+    @Test
+    fun `count reports the number of used chunk slots`(
+        @TempDir tempDir: Path,
+    ) {
+        val mcaBytes =
+            McaMemoryBuilder.buildMca(
+                listOf(
+                    McaMemoryBuilder.MemChunk(index = 0, inhabited = 1000, kind = CompressionKind.RAW),
+                    McaMemoryBuilder.MemChunk(index = 5, inhabited = 2000, kind = CompressionKind.RAW),
+                ),
+            )
+        val file = tempDir.resolve("r.0.0.mca")
+        java.nio.file.Files
+            .write(file, mcaBytes)
+        val reader = McaReader.open(file.toString())
+        try {
+            assertEquals(2, reader.count())
+            assertEquals(reader.entries().size, reader.count())
+        } finally {
+            reader.close()
+        }
+    }
+
+    @Test
     fun `written file can be read back by McaReader`(
         @TempDir tempDir: Path,
     ) {
@@ -154,6 +214,7 @@ class McaWriterTest {
             .copy(outFile, readBackFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         val readBackReader = McaReader.open(readBackFile.toString())
         try {
+            assertEquals(1, readBackReader.count(), "count should report the used slots")
             val entries = readBackReader.entries()
             assertEquals(1, entries.size, "should have one entry")
 

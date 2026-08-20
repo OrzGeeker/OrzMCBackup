@@ -10,6 +10,9 @@ interface McaReaderLike : AutoCloseable {
     /** All chunk entries in the region file. */
     fun entries(): List<McaEntry>
 
+    /** Count used chunk slots without allocating [McaEntry] objects. */
+    fun count(): Int = entries().size
+
     /** Get one chunk by sector index (0-1023), or null if unused. */
     fun get(index: Int): McaEntry?
 
@@ -38,6 +41,7 @@ interface McaIOFactory {
     fun createWriter(
         fs: FileSystem,
         path: Path,
+        syncOnFinalize: Boolean = true,
     ): McaWriterLike
 }
 
@@ -53,9 +57,10 @@ class DefaultMcaIOFactory : McaIOFactory {
     override fun createWriter(
         fs: FileSystem,
         path: Path,
+        syncOnFinalize: Boolean,
     ): McaWriterLike {
         val real = fs.toRealPath(path)
-        return RealMcaWriterAdapter(McaWriter(real.toString()))
+        return RealMcaWriterAdapter(McaWriter(real.toString(), syncOnFinalize = syncOnFinalize))
     }
 }
 
@@ -82,6 +87,8 @@ class RealMcaReaderAdapter(
     private val delegate: McaReader,
 ) : McaReaderLike {
     override fun entries(): List<McaEntry> = delegate.entries()
+
+    override fun count(): Int = delegate.count()
 
     override fun get(index: Int): McaEntry? = delegate.get(index)
 
@@ -159,6 +166,7 @@ class MemoryMcaIOFactory : McaIOFactory {
     override fun createWriter(
         fs: FileSystem,
         path: Path,
+        syncOnFinalize: Boolean,
     ): McaWriterLike {
         val mem = fs as? MemoryFS ?: throw IllegalArgumentException("MemoryMcaIOFactory requires MemoryFS")
         return MemoryMcaWriter(mem, path)

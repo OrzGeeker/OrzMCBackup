@@ -122,8 +122,11 @@ object RealFileSystem : FileSystem {
         dst: Path,
         replaceExisting: Boolean,
     ) {
-        val opt = if (replaceExisting) StandardCopyOption.REPLACE_EXISTING else null
-        if (opt != null) Files.copy(src, dst, opt) else Files.copy(src, dst)
+        // Never follow symlinks when copying: a link must be copied as a link, not as its target.
+        val opts = ArrayList<java.nio.file.CopyOption>(2)
+        opts.add(java.nio.file.LinkOption.NOFOLLOW_LINKS)
+        if (replaceExisting) opts.add(StandardCopyOption.REPLACE_EXISTING)
+        Files.copy(src, dst, *opts.toTypedArray())
     }
 
     override fun write(
@@ -146,25 +149,7 @@ object RealFileSystem : FileSystem {
         root: Path,
         attempts: Int,
         sleepMs: Long,
-    ): Boolean {
-        var i = 0
-        while (i < attempts) {
-            try {
-                Files.walk(root).sorted(Comparator.reverseOrder()).forEach { p ->
-                    Cleaner.clearDosAttributes(p)
-                    Files.deleteIfExists(p)
-                }
-                return true
-            } catch (_: Exception) {
-                try {
-                    Thread.sleep(sleepMs)
-                } catch (_: Exception) {
-                }
-                i++
-            }
-        }
-        return false
-    }
+    ): Boolean = Cleaner.deleteTreeWithRetry(root, attempts, sleepMs)
 
     override fun toRealPath(path: Path): Path = path
 }
@@ -200,18 +185,9 @@ class MemoryFS : FileSystem {
 
     override fun exists(path: Path): Boolean = nodes.containsKey(path)
 
-    override fun list(path: Path): List<Path> {
-        val base = path.toString().trimEnd('/')
-        return nodes.keys.filter { key ->
-            val s = key.toString()
-            s.startsWith(base) && s != base && !s.removePrefix(base + "/").contains("/")
-        }
-    }
+    override fun list(path: Path): List<Path> = nodes.keys.filter { key -> key.parent == path }
 
-    override fun walk(path: Path): List<Path> {
-        val base = path.toString().trimEnd('/')
-        return nodes.keys.filter { it.toString().startsWith(base) }
-    }
+    override fun walk(path: Path): List<Path> = nodes.keys.filter { it.startsWith(path) }
 
     override fun createDirectories(path: Path) {
         nodes[path] = NodeType.DIRECTORY

@@ -28,16 +28,6 @@ class NbtForceLoaderTest {
         return bos.toByteArray()
     }
 
-    /** Write a named TAG_Compound entry (for use inside a parent compound) */
-    private fun DataOutputStream.writeNamedCompound(
-        name: String,
-        vararg entries: Pair<String, Pair<Byte, DataOutputStream.() -> Unit>>,
-    ) {
-        writeByte(0x0A) // TAG_Compound tag type
-        writeNbtString(name)
-        writeCompoundEntries(*entries)
-    }
-
     /** Write compound entries without a wrapping tag header — for list element compounds */
     private fun DataOutputStream.writeCompoundEntries(
         vararg entries: Pair<String, Pair<Byte, DataOutputStream.() -> Unit>>,
@@ -344,5 +334,68 @@ class NbtForceLoaderTest {
             },
             "oversized list should be rejected",
         )
+    }
+
+    @Test
+    fun `nested compound exceeding max depth is rejected`() {
+        val data =
+            buildChunksDat {
+                writeByte(0x0A) // TAG_Compound (root)
+                writeNbtString("")
+                // root(0) > data(1) > lvl1(2) > lvl2(3); limit 2 allows up to lvl1.
+                writeByte(0x0A) // TAG_Compound "data"
+                writeNbtString("data")
+                writeByte(0x0A) // TAG_Compound "lvl1"
+                writeNbtString("lvl1")
+                writeByte(0x0A) // TAG_Compound "lvl2" — depth 3 exceeds the limit
+                writeNbtString("lvl2")
+                writeByte(0) // TAG_End (lvl2)
+                writeByte(0) // TAG_End (lvl1)
+                writeByte(0) // TAG_End (data)
+                writeByte(0) // TAG_End (root)
+            }
+        assertThrows(
+            IllegalArgumentException::class.java,
+            {
+                NbtForceLoader.parse(
+                    java.io.File.createTempFile("chunks", ".dat").apply {
+                        writeBytes(data)
+                        deleteOnExit()
+                    },
+                    maxCompoundDepth = 2,
+                )
+            },
+            "compound nesting beyond maxCompoundDepth should be rejected",
+        )
+    }
+
+    @Test
+    fun `compound nesting within max depth parses normally`() {
+        val data =
+            buildChunksDat {
+                writeByte(0x0A) // TAG_Compound (root)
+                writeNbtString("")
+                writeByte(0x0A) // TAG_Compound "data"
+                writeNbtString("data")
+                writeByte(0x0C) // TAG_Long_Array "Forced"
+                writeNbtString("Forced")
+                writeInt(2)
+                writeLong(7)
+                writeLong(8)
+                writeByte(0x0A) // TAG_Compound "lvl1" — depth 2, at the limit
+                writeNbtString("lvl1")
+                writeByte(0) // TAG_End (lvl1)
+                writeByte(0) // TAG_End (data)
+                writeByte(0) // TAG_End (root)
+            }
+        val result =
+            NbtForceLoader.parse(
+                java.io.File.createTempFile("chunks", ".dat").apply {
+                    writeBytes(data)
+                    deleteOnExit()
+                },
+                maxCompoundDepth = 2,
+            )
+        assertTrue(result.contains(7 to 8), "forced chunk nested within depth limit should parse")
     }
 }

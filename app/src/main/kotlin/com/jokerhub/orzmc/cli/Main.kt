@@ -106,6 +106,13 @@ class Main : Callable<Int> {
     var parallelism: Int = 1
 
     @Option(
+        names = ["--no-fsync"],
+        description = ["Skip per-region fsync after finalize (faster, less durable)"],
+        defaultValue = "false",
+    )
+    var noFsync: Boolean = false
+
+    @Option(
         names = ["--copy-misc"],
         description = ["Copy non-region/entities/poi files and folders in each dimension"],
         defaultValue = "true",
@@ -216,6 +223,7 @@ class Main : Callable<Int> {
                         ),
                     runtime = RuntimeOptions(parallelism = parallelism),
                     hooks = Hooks(reportSink = reportSink),
+                    io = IOOptions(syncOnFinalize = !noFsync),
                 )
             val r = Optimizer.run(request)
             if (report) logger.info(ReportIO.toText(r))

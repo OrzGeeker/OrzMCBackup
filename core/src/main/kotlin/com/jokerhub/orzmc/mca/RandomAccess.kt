@@ -64,11 +64,15 @@ class BufferedRafAccess(
     private var bufPos = 0
     private var bufLen = 0
 
-    private fun alignDown(pos: Long): Long = pos / bufferSize * bufferSize
+    /** Absolute file position, tracked across buffered and bypassed reads. */
+    private var pos = 0L
 
-    private fun ensure(pos: Long) {
-        val aligned = alignDown(pos)
-        if (aligned >= bufStart && aligned < bufStart + bufLen && bufPos < bufLen) {
+    private fun alignDown(p: Long): Long = p / bufferSize * bufferSize
+
+    private fun ensure(p: Long) {
+        val aligned = alignDown(p)
+        if (aligned == bufStart && p - aligned < bufLen) {
+            bufPos = (p - aligned).toInt()
             return // still inside current buffer
         }
         bufStart = aligned
@@ -83,12 +87,12 @@ class BufferedRafAccess(
         if (buf.size < readLen) buf = ByteArray(readLen)
         delegate.readFully(buf, 0, readLen)
         bufLen = readLen
-        bufPos = 0
+        bufPos = (p - aligned).toInt()
     }
 
     override fun seek(pos: Long) {
+        this.pos = pos
         ensure(pos)
-        bufPos = (pos - bufStart).toInt()
     }
 
     override fun readFully(buf: ByteArray) {
@@ -100,22 +104,37 @@ class BufferedRafAccess(
         off: Int,
         len: Int,
     ) {
+        if (len >= bufferSize) {
+            // Large read (e.g. a whole chunk): bypass the 8 KiB buffer and read straight
+            // from the delegate, avoiding ~len/bufferSize intermediate copies. The position
+            // advances normally; the buffer is invalidated so the next access reloads.
+            delegate.seek(pos)
+            delegate.readFully(dst, off, len)
+            pos += len
+            bufStart = -1
+            bufPos = 0
+            bufLen = 0
+            return
+        }
         var remaining = len
         var dstOff = off
         while (remaining > 0) {
-            if (bufPos >= bufLen) {
-                // current buffer exhausted, advance to next aligned block
-                bufStart += bufferSize
-                ensure(bufStart)
+            if (!(pos >= bufStart && pos < bufStart + bufLen)) {
+                ensure(pos)
+                if (bufLen == 0 || pos >= bufStart + bufLen) {
+                    // Data block crosses the end of file (invalid offset/len combo from a
+                    // corrupted chunk): throw EOF rather than looping forever.
+                    throw java.io.EOFException("Unexpected end of file at offset $pos")
+                }
             }
+            bufPos = (pos - bufStart).toInt()
             val avail = minOf(remaining, bufLen - bufPos)
             if (avail <= 0) {
-                // 数据块越过了文件末尾（损坏 chunk 的 offset/len 组合非法）：
-                // 抛 EOF 而非死循环（旧实现 remaining 不减 → 无限循环卡死）
-                throw java.io.EOFException("Unexpected end of file at offset $bufStart")
+                throw java.io.EOFException("Unexpected end of file at offset $pos")
             }
             System.arraycopy(this.buf, bufPos, dst, dstOff, avail)
             bufPos += avail
+            pos += avail
             dstOff += avail
             remaining -= avail
         }

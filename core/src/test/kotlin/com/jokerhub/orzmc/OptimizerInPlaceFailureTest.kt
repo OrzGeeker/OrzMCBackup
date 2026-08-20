@@ -191,5 +191,6 @@ private class UnwrappingIOFactory : McaIOFactory {
     override fun createWriter(
         fs: FileSystem,
         path: Path,
-    ): McaWriterLike = inner.createWriter(unwrap(fs), path)
+        syncOnFinalize: Boolean,
+    ): McaWriterLike = inner.createWriter(unwrap(fs), path, syncOnFinalize)
 }

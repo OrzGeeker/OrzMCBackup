@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
@@ -40,7 +43,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@v6.2.0
       - name: Run lint gates
         # C11: tag push 不触发 test-matrix，release 自带 ktlint/detekt 门禁
         run: ./gradlew ktlintCheck detekt --no-daemon
@@ -53,26 +56,16 @@ jobs:
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
         run: ./gradlew :core:portalBundle --no-daemon -Pversion=${{ env.VERSION }}
-      - name: Generate checksums
+      - name: Validate artifacts and signatures
         run: |
-          ART_DIR="core/build/portal-repo/io/github/wangzhizhou/backup-core/${VERSION}"
-          files=("backup-core-${VERSION}.jar" "backup-core-${VERSION}-sources.jar" "backup-core-${VERSION}-javadoc.jar" "backup-core-${VERSION}.pom")
-          for f in "${files[@]}"; do
-            sha256sum "${ART_DIR}/${f}" | awk '{print $1}' > "${ART_DIR}/${f}.sha256"
-          done
-      - name: Validate signatures and checksums
-        run: |
+          # C12: 生成后立即用同一批本地文件反验是自证式同义反复，无法发现上传损坏；
+          # 仅保留产物与 .asc 签名存在性检查，真实校验应在 Portal 返回后回下载验证。
           ART_DIR="core/build/portal-repo/io/github/wangzhizhou/backup-core/${VERSION}"
           ls -la "$ART_DIR"
           files=("backup-core-${VERSION}.jar" "backup-core-${VERSION}-sources.jar" "backup-core-${VERSION}-javadoc.jar" "backup-core-${VERSION}.pom")
           for f in "${files[@]}"; do
             test -s "$ART_DIR/$f" || { echo "missing artifact: $f"; exit 1; }
             test -s "$ART_DIR/$f.asc" || { echo "missing signature: $f.asc"; exit 1; }
-            actual=$(sha256sum "$ART_DIR/$f" | awk '{print $1}')
-            expected=$(tr -d '\n\r' < "$ART_DIR/$f.sha256")
-            if [ "$actual" != "$expected" ]; then
-              echo "sha256 mismatch for $f"; echo "expected=$expected actual=$actual"; exit 1;
-            fi
           done
       - name: Validate bundle archive
         run: |

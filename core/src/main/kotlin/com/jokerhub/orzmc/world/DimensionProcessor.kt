@@ -34,14 +34,11 @@ internal object DimensionProcessor {
         targetDim: Path,
         patterns: List<ChunkPattern>,
         onError: (Path, String, String) -> Unit,
-        progressSink: ProgressSink,
-        totalChunks: Long,
-        progressInterval: Long,
-        progressIntervalMs: Long,
-        processedCounter: java.util.concurrent.atomic.AtomicLong,
+        progress: ProgressTracker,
         strict: Boolean,
         regionParallelism: Int = 1,
         dryRun: Boolean = false,
+        syncOnFinalize: Boolean = true,
     ): DimensionResult {
         var removedTotal = 0L
         fs.createDirectories(targetDim)
@@ -51,8 +48,8 @@ internal object DimensionProcessor {
         fs.createDirectories(targetDim.resolve("region"))
         if (fs.isDirectory(entitiesDir)) fs.createDirectories(targetDim.resolve("entities"))
         if (fs.isDirectory(poiDir)) fs.createDirectories(targetDim.resolve("poi"))
-        progressSink.emit(ProgressEvent(ProgressStage.DimensionStart, null, null, inputDim.toString(), null))
-        val useTime = progressIntervalMs > 0
+        progress.emit(ProgressStage.DimensionStart, null, null, inputDim, null)
+        val useTime = progress.intervalMs > 0
         var lastEmit = System.currentTimeMillis()
 
         val regionFiles = fs.list(regionDir).filter { p -> p.toString().endsWith(".mca") }
@@ -74,11 +71,7 @@ internal object DimensionProcessor {
                                     targetDim,
                                     patterns,
                                     onError,
-                                    progressSink,
-                                    totalChunks,
-                                    progressInterval,
-                                    progressIntervalMs,
-                                    processedCounter,
+                                    progress,
                                     strict,
                                     useTime,
                                     lastEmit,
@@ -87,6 +80,7 @@ internal object DimensionProcessor {
                                     poiDir,
                                     rf,
                                     dryRun,
+                                    syncOnFinalize,
                                 )
                             },
                         )
@@ -117,11 +111,7 @@ internal object DimensionProcessor {
                         targetDim,
                         patterns,
                         onError,
-                        progressSink,
-                        totalChunks,
-                        progressInterval,
-                        progressIntervalMs,
-                        processedCounter,
+                        progress,
                         strict,
                         useTime,
                         lastEmit,
@@ -130,13 +120,14 @@ internal object DimensionProcessor {
                         poiDir,
                         rf,
                         dryRun,
+                        syncOnFinalize,
                     )
                 removedTotal += r.removed
             }
         }
 
-        progressSink.emit(ProgressEvent(ProgressStage.DimensionEnd, null, null, inputDim.toString(), null))
-        return DimensionResult(processedCounter.get(), removedTotal)
+        progress.emit(ProgressStage.DimensionEnd, null, null, inputDim, null)
+        return DimensionResult(progress.processed.get(), removedTotal)
     }
 
     private fun processSingleRegion(
@@ -146,11 +137,7 @@ internal object DimensionProcessor {
         targetDim: Path,
         patterns: List<ChunkPattern>,
         onError: (Path, String, String) -> Unit,
-        progressSink: ProgressSink,
-        totalChunks: Long,
-        progressInterval: Long,
-        progressIntervalMs: Long,
-        processedCounter: java.util.concurrent.atomic.AtomicLong,
+        progress: ProgressTracker,
         strict: Boolean,
         useTime: Boolean,
         lastEmit: Long,
@@ -159,11 +146,12 @@ internal object DimensionProcessor {
         poiDir: Path,
         rf: Path,
         dryRun: Boolean = false,
+        syncOnFinalize: Boolean = true,
     ): RegionResult {
         var localRemoved = 0L
         var localLastEmit = lastEmit
 
-        progressSink.emit(ProgressEvent(ProgressStage.RegionStart, null, null, rf.toString(), null))
+        progress.emit(ProgressStage.RegionStart, null, null, rf, null)
         if (!McaUtils.isValidMca(fs, rf)) {
             onError(rf, ERR_MCA, "MCA file is corrupted or incomplete")
             if (!strict) return RegionResult(0, 0)
@@ -236,9 +224,28 @@ internal object DimensionProcessor {
                 if (keep) {
                     // Lazily create writers only when at least one chunk is kept.
                     if (cw == null && !dryRun) {
-                        cw = ioFactory.createWriter(fs, targetDim.resolve("region").resolve(name))
-                        if (er != null) ew = ioFactory.createWriter(fs, targetDim.resolve("entities").resolve(name))
-                        if (pr != null) pw = ioFactory.createWriter(fs, targetDim.resolve("poi").resolve(name))
+                        cw =
+                            ioFactory.createWriter(
+                                fs,
+                                targetDim.resolve("region").resolve(name),
+                                syncOnFinalize,
+                            )
+                        if (er != null) {
+                            ew =
+                                ioFactory.createWriter(
+                                    fs,
+                                    targetDim.resolve("entities").resolve(name),
+                                    syncOnFinalize,
+                                )
+                        }
+                        if (pr != null) {
+                            pw =
+                                ioFactory.createWriter(
+                                    fs,
+                                    targetDim.resolve("poi").resolve(name),
+                                    syncOnFinalize,
+                                )
+                        }
                     }
                     try {
                         cw?.writeEntry(entry)
@@ -278,19 +285,15 @@ internal object DimensionProcessor {
                 } else {
                     localRemoved += 1
                 }
-                val processed = processedCounter.incrementAndGet()
+                val processed = progress.processed.incrementAndGet()
                 if (useTime) {
                     val now = System.currentTimeMillis()
-                    if (now - localLastEmit >= progressIntervalMs) {
-                        progressSink.emit(
-                            ProgressEvent(ProgressStage.ChunkProgress, processed, totalChunks, rf.toString(), null),
-                        )
+                    if (now - localLastEmit >= progress.intervalMs) {
+                        progress.emit(ProgressStage.ChunkProgress, processed, progress.total, rf, null)
                         localLastEmit = now
                     }
-                } else if (progressInterval > 0 && processed % progressInterval == 0L) {
-                    progressSink.emit(
-                        ProgressEvent(ProgressStage.ChunkProgress, processed, totalChunks, rf.toString(), null),
-                    )
+                } else if (progress.interval > 0 && processed % progress.interval == 0L) {
+                    progress.emit(ProgressStage.ChunkProgress, processed, progress.total, rf, null)
                 }
             }
             try {

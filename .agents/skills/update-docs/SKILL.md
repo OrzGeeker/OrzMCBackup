@@ -23,8 +23,8 @@ description: 维护 OrzMCBackup 的文档（README.md / docs/）。修改实现�
 3. **产物命名**：CLI JAR 恒为 `backup.jar`（文件名固定，版本只写入 manifest `Implementation-Version`，
    用 `--version` 查询）；本地默认版本 0.1.0，CI 按 tag 注入
 4. **JDK 范围**：17-29（构建阻止 30+）；发布工作流用 Temurin 21、lint/coverage 用 JDK 25
-5. **行为声明**：功能声明必须与代码一致。已知易夸大项：`RangePattern`（矩形区域）是**库内类，
-   未接入优化器管道与 CLI**，文档不得声称 CLI 支持矩形范围
+5. **行为声明**：功能声明必须与代码一致。已知易夸大项：`RangePattern`（矩形区域）已于 P2-T11
+   删除（生产死代码，仅测试引用），文档不得声称存在矩形范围保留
 6. **链接**：所有相对链接（`LICENSE`、`docs/`、`CONTRIBUTING.md`、`SECURITY.md`、
    `gradle/libs.versions.toml` 等）必须指向真实存在的文件。**落地页 `docs/index.html` 的站内文档
    链接统一为 `doc.html?file=xxx.md`**（`docs/.nojekyll` 下直链 `.md` 会显示原始文本，不可读）；

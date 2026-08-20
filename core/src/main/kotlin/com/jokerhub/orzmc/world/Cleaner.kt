@@ -6,7 +6,7 @@ import java.nio.file.attribute.DosFileAttributeView
 
 /** Utilities for cleaning up files and directories, including Windows-specific attributes. */
 object Cleaner {
-    /** Clear Windows DOS read-only and hidden attributes on [p]. No-op on non-Windows. */
+    /** Clear Windows DOS read-only, hidden and system attributes on [p]. No-op on non-Windows. */
     fun clearDosAttributes(p: Path) {
         try {
             val v = Files.getFileAttributeView(p, DosFileAttributeView::class.java)
@@ -17,6 +17,10 @@ object Cleaner {
                 }
                 try {
                     v.setHidden(false)
+                } catch (_: Exception) {
+                }
+                try {
+                    v.setSystem(false)
                 } catch (_: Exception) {
                 }
             }

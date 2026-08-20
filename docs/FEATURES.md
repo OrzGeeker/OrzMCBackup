@@ -110,12 +110,7 @@ Minecraft Java 版世界优化工具，双用途：
 - 根据全局 `(x, z)` 坐标列表保留区块
 - 用于强制加载区块的保留，也可用于自定义保留列表
 
-### 4.3 `RangePattern` — 矩形区域模式
-
-- 保留矩形 `(minX, minZ) ~ (maxX, maxZ)` 内的所有区块
-- 自动坐标归一化（不要求用户传入的顺序）
-
-### 4.4 模式组合
+### 4.3 模式组合
 
 优化器始终合并两种模式：`ListPattern(forced) + InhabitedTimePattern(ticks, removeUnknown)`
 - 顺序：按列表顺序评估
@@ -427,9 +422,11 @@ Minecraft Java 版世界优化工具，双用途：
 | `MemoryE2ETest` | 端到端 | 全管道：世界创建 → 优化 → 报告 |
 | `MemoryParallelE2ETest` | 端到端 | 并行模式全管道 |
 | `McaReaderTest` | 单元 | 文件/内存打开、条目解析、坐标提取 |
-| `McaWriterTest` | 单元 | 写入单/多区块、头部完整性 |
-| `RangePatternTest` | 单元 | 矩形匹配、坐标归一化 |
-| `NbtForceLoaderTest` | 单元 | 新版/旧版强制加载 NBT 解析 |
+| `McaWriterTest` | 单元 | 写入单/多区块、头部完整性、`count()`、`syncOnFinalize` |
+| `RandomAccessTest` | 单元 | 缓冲/旁路大读、EOF 边界、混合读计划 |
+| `CleanerTest` | 单元 | DOS 属性清理、只读文件树删除、缺根语义 |
+| `MemoryFSTest` | 单元 | `list`/`walk` 直接子级与组件级匹配（Windows 反斜杠安全） |
+| `NbtForceLoaderTest` | 单元 | 新版/旧版强制加载 NBT 解析、数组/列表/深度边界 |
 | `Lz4InvalidTest` | 单元 | 损坏 LZ4 数据的容错 |
 | `OptimizerApiTest` | 单元 | API 入口组合 |
 | `OptimizerConfigParamTest` | 参数化 | 所有配置组合 |
