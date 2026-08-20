@@ -30,7 +30,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6.2.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run ktlint and detekt
         run: bash tools/ci-retry.sh ./gradlew ktlintCheck detekt --no-daemon
   ubuntu-tests:
@@ -51,7 +51,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - uses: gradle/actions/setup-gradle@v6.2.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run tests on ${{ matrix.java }}
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       # P1-C4: coverage 并入矩阵的 Java 17 job，复用同一步已跑的 test 结果，
@@ -100,7 +100,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - uses: gradle/actions/setup-gradle@v6.2.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run tests on Windows Java ${{ matrix.java }}
         shell: bash
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
@@ -127,7 +127,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - uses: gradle/actions/setup-gradle@v6.2.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run tests on macOS Java ${{ matrix.java }}
         run: bash tools/ci-retry.sh ./gradlew :core:test :app:test --no-daemon
       - name: Upload test report
