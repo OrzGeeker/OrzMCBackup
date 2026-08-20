@@ -186,6 +186,15 @@
 - 站点落地页新增该报告入口（`doc.html?file=architecture-review.md`）。
 - 修复状态表更新：A3/A4/A5、C1–C4、C9–C11、T2–T9、koverVerify 质量门禁全部标记 ✅。
 
+### Release（发布结果）
+- **v0.3.0 已发布至 Maven Central**：repo1 全部 4 产物（jar/sources/javadoc/pom）+ `.asc` HTTP 200，
+  GPG 签名 keyid `99A70EC6`；GitHub Release v0.3.0 含 `backup.jar` + `.sha256`。
+- **发布期修复按时间线记入次版**：签名解码（`Base64.getMimeDecoder()`）与 Portal 兼容
+  （deploymentId 裸 UUID 解析、status POST + `deploymentState`）等发布流程暴露的问题，代码修复与
+  最终结果记入 **v0.3.1** 条目。
+- **Central 发布配额警告**：org `wangzhizhou` 超过 Central 月发布上限，**2026-10-01 起强制执行**。
+  后续 patch 发布建议攒批合并（如多个 v0.3.x 一起发），降低配额消耗。
+
 ## v0.2.3 (2026-08-20)
 
 ### Fixed
