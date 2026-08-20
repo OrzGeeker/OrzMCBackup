@@ -81,7 +81,11 @@ object DefaultMerger : MergeEngine {
 
         // Guard against aliasing before any write: an overlapping base/patch/output could
         // wipe or corrupt the source worlds (e.g. output == base with --force).
-        if (overlaps(fs, base, out) || overlaps(fs, patch, out) || overlaps(fs, base, patch)) {
+        if (
+            OverlapGuard.overlaps(fs, base, out) ||
+            OverlapGuard.overlaps(fs, patch, out) ||
+            OverlapGuard.overlaps(fs, base, patch)
+        ) {
             record(base, ERR_INPUT, "base, patch and output must be three distinct, non-overlapping directories")
             return MergeReport(errors = errors)
         }
@@ -181,29 +185,6 @@ object DefaultMerger : MergeEngine {
             return null
         }
         return out
-    }
-
-    private fun overlaps(
-        fs: FileSystem,
-        a: Path,
-        b: Path,
-    ): Boolean {
-        fun resolve(p: Path): Path {
-            // On the real filesystem, follow symlinks/junctions so an output dir that
-            // aliases base/patch through a link is caught. MemoryFS.toRealPath materializes
-            // unrelated temp paths, so it must keep the lexical comparison.
-            if (fs is RealFileSystem && fs.exists(p)) {
-                try {
-                    return p.toRealPath()
-                } catch (_: Exception) {
-                    // fall through to lexical normalization
-                }
-            }
-            return p.toAbsolutePath().normalize()
-        }
-        val na = resolve(a)
-        val nb = resolve(b)
-        return na == nb || na.startsWith(nb) || nb.startsWith(na)
     }
 
     private fun copyTree(

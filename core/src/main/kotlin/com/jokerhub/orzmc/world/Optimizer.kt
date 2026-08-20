@@ -147,6 +147,19 @@ object DefaultOptimizer : OptimizerEngine {
             record(input, "Input", msg)
             return OptimizeReport(processedChunks = 0, removedChunks = 0, errors = errors)
         }
+        // Guard against aliasing before any write: an output that is the same as the input,
+        // an ancestor/descendant of it, or aliases it through a symlink/junction would be
+        // wiped by --force before processing, irreversibly destroying the source world.
+        // In-place and dry-run modes use a fresh temp directory that can never overlap.
+        val outputOverlapsInput =
+            !request.outputOptions.inPlace &&
+                !request.outputOptions.dryRun &&
+                request.output != null &&
+                OverlapGuard.overlaps(fs, input, request.output)
+        if (outputOverlapsInput) {
+            record(input, "Input", "input and output must be distinct, non-overlapping directories")
+            return OptimizeReport(processedChunks = 0, removedChunks = 0, errors = errors)
+        }
         emit(ProgressStage.Init, 0, 0, input, "starting")
 
         val out = resolveOutputDir(fs, request, errors, progressSink) ?: return OptimizeReport(0, 0, errors)
