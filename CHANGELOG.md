@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### CI
+- **release-lib Portal 兼容修复**（v0.3.0 发布流程暴露，供未来版本发布使用）：
+  - **deploymentId 解析**：Portal 201 响应体是**裸 UUID**（非 JSON），原 sed 匹配
+    `"deploymentId": "..."` 失败 → 误报 `no deploymentId` 并重复上传，产生 3 个 orphan
+    deployment（首个发布成功、其余因坐标占用 FAILED——Central 去重保护生效）。改用 UUID
+    形状正则提取，兼容裸 UUID / JSON / 尾部换行三种格式。
+  - **status 轮询**：端点为 **POST**（原 GET 返回 500）、响应字段为 `deploymentState`（原解析
+    `status` 恒为空）；状态值 `PENDING/VALIDATING/VALIDATED/PUBLISHING/PUBLISHED/FAILED`；
+    USER_MANAGED 模式卡在 `VALIDATED` 时自动 `POST /deployment/<id>` 触发发布。
+  - 已用真实 secrets 在 CI 诊断 workflow 验证：首个 orphan deployment `PUBLISHED` 即发布 0.3.0，
+    后两个因坐标占用 `FAILED`，符合预期；诊断 workflow 已移除。
+
 ## v0.3.0 (2026-08-20)
 
 ### Performance (A9/A11/A12/A13/A15)
@@ -66,6 +78,12 @@
   `com.pinterest.ktlint:ktlint-cli:14.2.0`，杜绝 hook 与项目版本漂移。
 - **Dependabot grouping（C21）**：`dependabot.yml` 按领域聚合 gradle 依赖更新（quality-tooling /
   kotlin-and-coroutines / runtime-and-test）+ actions 单组，避免 10 个独立 PR × 全矩阵 churn。
+- **签名解码修复（C10 后续，发布期发现）**：`SIGNING_KEY` secret 为「单行 base64 + 尾部换行符」。
+  C10 从 CLI 注入改为 env 注入后，GitHub Actions 保留 secret 尾部换行；basic `Base64.getDecoder()`
+  拒绝 whitespace 抛异常，`getOrElse` 回退到原始 base64，`useInMemoryPgpKeys` 收到非 armored 输入
+  报 `Cannot find key with id ... in key data`（此前 CLI 路径经 shell 命令终止消费换行，故未触发）。
+  修复：改用 `Base64.getMimeDecoder()`（RFC 2045 容忍换行/空白）。本地以「带尾部换行 base64 +
+  env 注入」形状回归：修复前失败 / 修复后成功；CI 诊断 workflow 用真实 secrets 复现同一失败后移除。
 
 ### Dependencies (D1)
 - **lz4-java 坐标迁移**：`org.lz4:lz4-java` 项目已官方重定位到 `at.yawk.lz4:lz4-java`（原坐标真实版本
